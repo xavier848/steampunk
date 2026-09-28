@@ -55,7 +55,7 @@ export function buildCity() {
   {
     // with a square hole where the shaft goes down (x0..x1, z0..z1)
     const gm = { color: 0x6a5a50, layer: LAYER.COBBLE, scale: 4, spec: 0, emit: 0, id: 0.01, uv: false };
-    const hx0 = CITY.hatch.x - 1.3, hx1 = CITY.hatch.x + 1.3, hz0 = CITY.hatch.z - 1.3, hz1 = CITY.hatch.z + 1.3, E = 700;
+    const hx0 = CITY.hatch.x - 1.3, hx1 = CITY.hatch.x + 1.3, hz0 = CITY.hatch.z - 1.3, hz1 = CITY.hatch.z + 1.3, E = 1150;
     const slab = (x0, x1, z0, z1) => streets.add(P.box(), M((x0 + x1) / 2, -0.45, (z0 + z1) / 2, 0, 0, 0, x1 - x0, 0.5, z1 - z0), gm);
     slab(-E, E, -E, hz0); slab(-E, E, hz1, E); slab(-E, hx0, hz0, hz1); slab(hx1, E, hz0, hz1);
   }
@@ -92,6 +92,33 @@ export function buildCity() {
     } else {
       const floors = lot.floors ?? 3;
       addSimpleBuilding(chunkOf(lot.x, lot.z), { ...lot, h: lot.h ?? (G + floors * F), gear: lot.level === 1 && lot.seed % 5 === 0 }, X);
+    }
+  }
+
+  // ---------------------------------------------------------------- outskirts (only seen from the air)
+  // simple blocks from the edge of the town out to the painted far city ring, so the
+  // city reaches the horizon in the flight instead of ending on an empty plain
+  const outTiles = new Map();
+  const outOf = (x, z) => { const k = `${Math.floor(x / 220)},${Math.floor(z / 220)}`; if (!outTiles.has(k)) outTiles.set(k, new GeoBuilder()); return outTiles.get(k); };
+  {
+    const ro = new RNG(4711);
+    const ns = [], ew = [];
+    for (let x = -932; x <= 934; x += 80) ns.push(NS_STREETS.includes(x) ? x : x);
+    for (let z = -1092; z <= 848; z += 80) ew.push(z);
+    for (let i = 0; i < ns.length - 1; i++) for (let j = 0; j < ew.length - 1; j++) {
+      const bx0 = ns[i] + 4.5, bx1 = ns[i + 1] - 4.5, bz0 = ew[j] + 4.5, bz1 = ew[j + 1] - 4.5;
+      const cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2;
+      const inCore = cx > NS_STREETS[0] && cx < NS_STREETS[NS_STREETS.length - 1] && cz > EW_STREETS[0] && cz < EW_STREETS[EW_STREETS.length - 1] && Math.hypot(cx, cz * 0.8) <= 520 + 40;
+      if (inCore) continue;
+      const dr = Math.hypot(cx, cz + 120);
+      if (dr > 790) continue;
+      const oLots = [];
+      fillBlock({ bx0, bx1, bz0, bz1, level: 0, onMarket: false }, ro, oLots, () => false);
+      for (const lot of oLots) {
+        lot.h = ro.range(8, 17) * (1 - 0.3 * Math.min(1, (dr - 500) / 300));
+        lot.roof = ro.pick(['gable', 'gable', 'gableX', 'flat', 'mansard']);
+        addSimpleBuilding(outOf(lot.x, lot.z), lot, null);
+      }
     }
   }
 
@@ -139,7 +166,11 @@ export function buildCity() {
       if (l.far) l.far.visible = !near;
     }
   };
-  return { group, X, rooftops, market, landmarks, lots, updateLOD, info: { tris: Math.round(tris), meshes: group.children.length, lots: lots.length, lodChunks: lod.length } };
+  const outskirts = new THREE.Group();
+  let outTris = 0;
+  for (const b of outTiles.values()) { if (b.empty) continue; const m = new THREE.Mesh(b.build(), mat); m.layers.enable(LAYER_STATIC_CASTER); outTris += m.geometry.index.count / 3; outskirts.add(m); }
+  group.add(outskirts);
+  return { group, X, rooftops, market, landmarks, lots, updateLOD, outskirts, info: { outskirtsTris: Math.round(outTris), tris: Math.round(tris), meshes: group.children.length, lots: lots.length, lodChunks: lod.length } };
 }
 
 // Perimeter block: houses along each edge facing outward, courtyard inside.

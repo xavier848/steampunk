@@ -268,6 +268,7 @@ export async function buildFilm(engine) {
       cityGroup.visible = region === 'city' || (region === 'shaft' && cy > -12);
       cityLife.visible = region === 'city';
       farCity.visible = region === 'city';
+      city.outskirts.visible = region === 'city' && camera.position.y > 22;
       sky.visible = region !== 'hall';
       under.group.visible = region !== 'city' || (ch >= 6 && nearHatch && !sh.blank);
       hallCrowd.group.visible = autos.group.visible = region === 'hall';

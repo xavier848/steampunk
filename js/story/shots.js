@@ -162,7 +162,7 @@ export function buildShots(story, TIME, flyover, extras = {}) {
     const b = smoothPos(boy, S, 0.3);
     return cam(V(13.5, 17.2, b.z + 4.5), b.clone().add(V(0, 0.8, -1.5)), 46);
   });
-  shot('5.7 Die Brandmauer', 5, T(A.clockLook + 0.5), (t, S) => cam(V(11.0, ROOF.h5 + 1.9, -88.6), boy.posAt(S).add(V(0.1, 0.8, 0)), 46));
+  shot('5.7 Die Brandmauer', 5, T(A.clockLook + 0.5), (t, S) => cam(V(10.6, ROOF.h5 + 1.5, -87.9), boy.posAt(S).add(V(0.1, 0.8, 0)), 44));
   shot('5.8 Sieben Minuten vor Sieben', 5, T(A.runUp + 0.2), (t, S, sh) => {
     const b = boy.posAt(S);
     const u = ease((t - sh.t0) / (sh.t1 - sh.t0));
