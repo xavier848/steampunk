@@ -1,0 +1,6 @@
+html, body { margin: 0; height: 100%; background: #0b0908; overflow: hidden; }
+#stage { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+#film { width: 100%; height: 100%; display: block; }
+body.headless #stage { position: static; display: block; }
+body.headless #film { width: auto; height: auto; }
+body.headless #ui { display: none; }

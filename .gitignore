@@ -1,0 +1,5 @@
+node_modules/
+/render/frames/
+/render/segments/
+*.log
+.DS_Store
