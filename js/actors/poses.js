@@ -165,3 +165,111 @@ export function addRot(p, bone, x, y, z) {
   r[0] += x; r[1] += y; r[2] += z;
   return p;
 }
+
+// ---- extra poses for the story
+// baseball slide under an obstacle, u in 0..1
+export function slide(u) {
+  const p = empty();
+  const k = Math.sin(Math.min(1, u * 1.15) * Math.PI * 0.5);
+  p.rot.L_thigh = [-1.35 * k, 0, 0.12]; p.rot.R_thigh = [-0.4 * k, 0, -0.1];
+  p.rot.L_shin = [0.15, 0, 0]; p.rot.R_shin = [1.5 * k, 0, 0];
+  p.rot.spine = [-0.9 * k, 0, 0]; p.rot.chest = [-0.25 * k, 0, 0]; p.rot.head = [0.6 * k, 0, 0];
+  p.rot.L_arm = [-0.6 * k, 0, 0.9 * k]; p.rot.R_arm = [0.4 * k, 0, -1.1 * k];
+  p.rot.L_fore = [-0.4, 0, 0]; p.rot.R_fore = [-0.3, 0, 0];
+  p.hipsOff = [0, -0.55 * k, 0];
+  return p;
+}
+// arms spread for balance on a ridge (added on top of locomotion)
+export function balance(p, amt = 1, t = 0) {
+  const w = Math.sin(t * 3.1) * 0.15;
+  p.rot.L_arm = [(p.rot.L_arm?.[0] ?? 0) * (1 - amt) - 0.2 * amt, 0, 1.25 * amt + w];
+  p.rot.R_arm = [(p.rot.R_arm?.[0] ?? 0) * (1 - amt) - 0.2 * amt, 0, -1.25 * amt + w];
+  p.rot.L_fore = [-0.3, 0, 0]; p.rot.R_fore = [-0.3, 0, 0];
+  addRot(p, 'spine', -0.1 * amt, 0, w * 0.4);
+  return p;
+}
+// duck under something while running (amt 0..1)
+export function duck(p, amt) {
+  addRot(p, 'spine', 0.55 * amt, 0, 0); addRot(p, 'chest', 0.25 * amt, 0, 0); addRot(p, 'head', -0.3 * amt, 0, 0);
+  p.hipsOff[1] -= 0.22 * amt;
+  addRot(p, 'L_thigh', -0.35 * amt, 0, 0); addRot(p, 'R_thigh', -0.35 * amt, 0, 0);
+  addRot(p, 'L_shin', 0.35 * amt, 0, 0); addRot(p, 'R_shin', 0.35 * amt, 0, 0);
+  return p;
+}
+// looking at something held at the hip (the satchel)
+export function lookSatchel(t, amt = 1) {
+  const p = idle(t);
+  addRot(p, 'head', 0.55 * amt, 0.35 * amt, 0); addRot(p, 'neck', 0.2 * amt, 0.1 * amt, 0);
+  p.rot.L_arm = [-0.35 * amt, 0, 0.25]; p.rot.L_fore = [-0.9 * amt, 0, 0];
+  p.rot.R_arm = [-0.45 * amt, 0, -0.05]; p.rot.R_fore = [-1.2 * amt, 0.2, 0];
+  addRot(p, 'spine', 0.12 * amt, 0.1 * amt, 0);
+  return p;
+}
+// hiding crouched behind barrels, peeking to the side (peek 0..1)
+export function hide(t, peek = 0) {
+  const p = crouch(0.85, 0.2);
+  addRot(p, 'spine', 0.15, 0.3 * peek, 0); addRot(p, 'head', -0.25 - 0.2 * peek, 0.5 * peek, 0);
+  p.rot.R_arm = [-0.9, 0, -0.1]; p.rot.R_fore = [-1.3, 0, 0];
+  p.rot.L_arm = [-0.3, 0, 0.35]; p.rot.L_fore = [-1.5, 0, 0];
+  p.hipsOff[1] -= 0.02 * Math.sin(t * 1.7);
+  return p;
+}
+// turning the hatch wheel (arms circling in front of the chest)
+export function wheel(t, amt = 1) {
+  const p = crouch(0.25, 0.4);
+  const a = t * 5.5;
+  p.rot.L_arm = [-1.25 + Math.sin(a) * 0.35, 0, 0.25 + Math.cos(a) * 0.1];
+  p.rot.R_arm = [-1.25 + Math.sin(a + Math.PI) * 0.35, 0, -0.25 + Math.cos(a + Math.PI) * 0.1];
+  p.rot.L_fore = [-0.6 + Math.cos(a) * 0.2, 0, 0]; p.rot.R_fore = [-0.6 + Math.cos(a + Math.PI) * 0.2, 0, 0];
+  addRot(p, 'spine', 0.35, Math.sin(a) * 0.08, 0); addRot(p, 'head', -0.1, 0, 0);
+  return p;
+}
+// shielding the face from a blast (steam), u 0..1 fades in, then relaxes
+export function shield(t, amt = 1) {
+  const p = idle(t);
+  p.rot.R_arm = [-1.8 * amt, 0.3, -0.5 * amt]; p.rot.R_fore = [-1.9 * amt, 0, 0];
+  p.rot.L_arm = [-0.6 * amt, 0, 0.6 * amt]; p.rot.L_fore = [-1.0 * amt, 0, 0];
+  addRot(p, 'spine', -0.25 * amt, 0.3 * amt, 0); addRot(p, 'head', 0.2 * amt, 0.5 * amt, 0);
+  p.hipsOff[2] -= 0.12 * amt;
+  return p;
+}
+// leaning over an opening, looking down
+export function lookDown(t, amt = 1) {
+  const p = crouch(0.35 * amt, 0.2);
+  addRot(p, 'spine', 0.55 * amt, 0, 0); addRot(p, 'chest', 0.2 * amt, 0, 0); addRot(p, 'head', 0.55 * amt, 0, 0);
+  p.rot.L_arm = [-1.0 * amt, 0, 0.3]; p.rot.R_arm = [-1.0 * amt, 0, -0.3];
+  p.rot.L_fore = [-0.3, 0, 0]; p.rot.R_fore = [-0.3, 0, 0];
+  p.hipsOff[1] += Math.sin(t * 2) * 0.005;
+  return p;
+}
+// pointing with the right arm (the constable spots the glow)
+export function point(t, amt = 1) {
+  const p = idle(t);
+  p.rot.R_arm = [-1.5 * amt, 0.2, -0.2 * amt]; p.rot.R_fore = [-0.15, 0, 0];
+  addRot(p, 'spine', -0.05 * amt, -0.2 * amt, 0); addRot(p, 'head', 0, -0.15 * amt, 0);
+  return p;
+}
+// looking around (searching)
+export function search(t, amt = 1) {
+  const p = idle(t);
+  const a = Math.sin(t * 1.4) * 0.9 * amt;
+  addRot(p, 'head', -0.05, a, 0); addRot(p, 'chest', 0, a * 0.4, 0);
+  p.rot.L_arm = [0, 0, 0.35]; p.rot.L_fore = [-1.4, 0, 0];
+  p.rot.R_arm = [0, 0, -0.35]; p.rot.R_fore = [-1.4, 0, 0];
+  return p;
+}
+// holding a newspaper
+export function reading(t, amt = 1) {
+  const p = idle(t);
+  p.rot.L_arm = [-0.9 * amt, 0, 0.1]; p.rot.R_arm = [-0.9 * amt, 0, -0.1];
+  p.rot.L_fore = [-1.0 * amt, 0, 0]; p.rot.R_fore = [-1.0 * amt, 0, 0];
+  addRot(p, 'head', 0.3 * amt, 0, 0);
+  return p;
+}
+// hanging and sliding on a chain (see chainSlide), grip the chain above
+export function hang(t, swing = 0) {
+  const p = chainSlide(t, swing);
+  p.rot.L_thigh = [-0.3 + 0.2 * Math.sin(t * 2), 0, 0.05]; p.rot.R_thigh = [-0.1 - 0.2 * Math.sin(t * 2), 0, -0.05];
+  p.rot.L_shin = [0.5, 0, 0]; p.rot.R_shin = [0.4, 0, 0];
+  return p;
+}

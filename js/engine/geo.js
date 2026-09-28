@@ -172,7 +172,7 @@ export function gearGeometry(teeth, inner, hole, spokes, thick) {
       shape.holes.push(w);
     }
   }
-  const g = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 1, curveSegments: 6 });
+  const g = new THREE.ExtrudeGeometry(shape, { depth: thick, bevelEnabled: false, curveSegments: 3 });
   g.translate(0, 0, -thick / 2);
   return g;
 }
@@ -210,6 +210,20 @@ export function gableRoof(w, d, h, overhang = 0.4, { ends = true, thick = 0.14 }
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.computeVertexNormals();
   g.userData.eaveY = y0; g.userData.span = hd; g.userData.slope = slope;
+  return g;
+}
+
+// box (centred) with uv in metres on every face; faces: +x, -x, +y, -y, +z, -z
+export function boxUV(w, h, d) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const uv = g.attributes.uv;
+  const dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+  for (let f = 0; f < 6; f++) {
+    for (let k = 0; k < 4; k++) {
+      const i = f * 4 + k;
+      uv.setXY(i, uv.getX(i) * dims[f][0], uv.getY(i) * dims[f][1]);
+    }
+  }
   return g;
 }
 

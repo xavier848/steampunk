@@ -100,6 +100,9 @@ function props(b, { female = false }) {
     b.add(limb(v(-0.23, 0.86, 0.06), v(-0.25, 0.02, 0.1), 0.012, 0.012, { sides: 5, rings: 2 }), null, S(0x2a1a14, { spec: 0.4 }), PROP(1));
     b.add(new THREE.BoxGeometry(0.03, 0.26, 0.2).translate(-0.24, 0.84, 0.09), null, S(0xe6dcc6, { layer: LAYER.BRUSH }), PROP(2));
     b.add(new THREE.BoxGeometry(0.1, 0.26, 0.36).translate(-0.25, 0.68, 0.02), null, S(0x5a3422, { layer: LAYER.CLOTH, spec: 0.2 }), PROP(3));
+    // 4 lamplighter's pole with a little brass hook and flame
+    b.add(limb(v(-0.24, 0.5, 0.05), v(-0.2, 3.1, 0.3), 0.018, 0.015, { sides: 5, rings: 2 }), null, S(0x3a2618), PROP(4));
+    b.add(ellipsoid([-0.2, 3.14, 0.31], [0.03, 0.05, 0.03], { w: 6, h: 4 }), null, { color: 0xffc060, slot: FIX, layer: LAYER.BRUSH, scale: 0.3, emit: 4, id: 0.47 }, PROP(4));
   } else {
     // 1 basket, 2 parasol, 3 handbag
     b.add(new THREE.CylinderGeometry(0.15, 0.12, 0.14, 10).translate(-0.28, 0.8, 0.05), null, S(0xa8783e, { layer: LAYER.WOOD }), PROP(1));
@@ -174,6 +177,10 @@ void main() {
     knL = (0.3 + 1.0 * max(0.0, sin(ph + 1.2))) * amp; knR = (0.3 + 1.0 * max(0.0, sin(ph + 1.2 + 3.14159))) * amp;
     arL = 0.7 * s * amp; arR = -0.7 * s * amp; faL = faR = -1.3;
     bob = 0.05 * abs(cos(ph)) * amp; lean += 0.25 * amp; twist = 0.15 * s * amp; skirt = 0.2 * s;
+  } else if (gait > 5.5) { // cycling: legs pedal in circles, hands on the handlebar
+    float s = sin(ph), c = cos(ph);
+    thL = -1.05 + 0.45 * s; thR = -1.05 - 0.45 * s; knL = 1.25 + 0.45 * c; knR = 1.25 - 0.45 * c;
+    arL = -1.1; arR = -1.1; faL = -0.4; faR = -0.4; lean += 0.15; bob = 0.35;
   } else { // carrying: arms up holding something on the shoulder
     float s = sin(ph);
     thL = -0.35 * s * amp; thR = 0.35 * s * amp; knL = 0.1 + 0.4 * max(0.0, sin(ph + 1.4)); knR = 0.1 + 0.4 * max(0.0, sin(ph + 4.5));
@@ -250,7 +257,7 @@ void main() {
 
 // ------------------------------------------------------------------ crowd manager
 export class Crowd {
-  constructor(capacity = { gent: 80, lady: 80, worker: 60, market: 40, child: 40 }) {
+  constructor(capacity = { gent: 90, lady: 90, worker: 110, market: 45, child: 45 }) {
     this.group = new THREE.Group();
     this.kinds = {};
     const atlas = createFaceAtlas();
@@ -287,6 +294,7 @@ export class Crowd {
     return person;
   }
   // write dynamic state for one person
+  setHat(person, hat) { const K = this.kinds[person.kind]; K.A.iShape.setW(person.slot, hat); K.A.iShape.needsUpdate = true; }
   set(person, x, y, z, yaw, phase, gait, amp, startle, headYaw = 0, headPitch = 0, lean = 0) {
     const K = this.kinds[person.kind], i = person.slot, A = K.A;
     A.iPos.setXYZW(i, x, y, z, yaw);
@@ -299,4 +307,4 @@ export class Crowd {
   }
 }
 
-export const GAIT = { walk: 0, stand: 1, talk: 2, haggle: 3, run: 4, carry: 5 };
+export const GAIT = { walk: 0, stand: 1, talk: 2, haggle: 3, run: 4, carry: 5, cycle: 6 };

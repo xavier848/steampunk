@@ -10,6 +10,7 @@ import { RNG } from '../core/rng.js';
 export const LAYER = {
   PLASTER: 0, STONE: 1, BRICK: 2, WOOD: 3, TILE: 4, SLATE: 5, METAL: 6, COBBLE: 7,
   CLOTH: 8, STRIPES: 9, GLASS: 10, IRON: 11, PATINA: 12, PLANKS: 13, BRUSH: 14, FLAGSTONE: 15,
+  FACADE: 16, WATER: 17,
 };
 const SIZE = 512;
 const TAU = Math.PI * 2;
@@ -320,6 +321,38 @@ function brush(p) {
 function flagstone(p) {
   ashlar(p, 128, 110, 200, 6, 128, 5);
   p.scumble(200, [40, 140], [10, 30], 0, Math.PI, 128, 12, [0.05, 0.1]);
+}
+
+// far facades: 4 x 4 windows per tile (tile = 12 m wide, 14 m high). A = 1 wall, 0.5 frame, 0 glass
+function facade(p) {
+  p.fill(128, 255);
+  p.scumble(220, [60, 180], [20, 50], 0.1, 0.4, 128, 18, [0.08, 0.15]);
+  const r = p.r;
+  for (let row = 0; row < 4; row++) {
+    for (let col = 0; col < 4; col++) {
+      const x = col * 128 + 34, y = row * 128 + 26, w = 60, h = 84;
+      // lintel and sill
+      p.rect(p.ctx, x - 8, y - 10, w + 16, 9, rgb(160, 150, 140), 0.8);
+      p.rect(p.ctx, x - 6, y + h, w + 12, 8, rgb(160, 150, 140), 0.8);
+      // frame + glass
+      p.rect(p.ctx, x - 4, y - 2, w + 8, h + 4, rgb(70, 58, 50), 1);
+      p.rect(p.actx, x - 4, y - 2, w + 8, h + 4, gray(128), 1);
+      p.rect(p.ctx, x, y, w, h, rgb(100, 110, 128), 1);
+      p.rect(p.actx, x, y, w, h, gray(0), 1);
+      p.rect(p.ctx, x + w / 2 - 2, y, 4, h, rgb(70, 58, 50), 1);
+      p.rect(p.actx, x + w / 2 - 2, y, 4, h, gray(128), 1);
+      p.rect(p.ctx, x, y + h * 0.4, w, 4, rgb(70, 58, 50), 1);
+      p.rect(p.actx, x, y + h * 0.4, w, 4, gray(128), 1);
+      // sky reflection stroke
+      p.stroke(p.ctx, x + w * 0.3, y + h * 0.3, 50, 10, -0.9, gray(170), 0.35);
+    }
+    // string course between floors
+    p.rect(p.ctx, 0, row * 128 + 120, 512, 6, rgb(150, 140, 130), 0.6);
+  }
+}
+function water(p) {
+  p.fill(128);
+  p.scumble(400, [60, 220], [3, 9], 0, 0.06, 128, 40, [0.15, 0.3], true, 60);
 }
 
 const PAINT = [

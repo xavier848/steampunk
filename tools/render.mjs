@@ -85,6 +85,31 @@ async function main() {
       console.log(`t=${t} ${name}.png ${((Date.now() - s) / 1000).toFixed(2)}s`);
     }
   }
+  if (args.shots) {
+    // one frame per shot at a fraction of its length (default: middle); --shots all | 2.1,3.4 | 3 (chapter)
+    const frac = +(args.frac || 0.5);
+    const list = await page.evaluate(() => window.dampf.world.shots.map((s) => ({ name: s.name, t0: s.t0, t1: s.t1, chapter: s.chapter })));
+    const sel = String(args.shots);
+    const pick = list.filter((s) => sel === 'all' || sel.split(',').some((k) => s.name.startsWith(k + ' ') || s.name.startsWith(k + '.') || String(s.chapter) === k));
+    for (const s of pick) {
+      const t = s.t0 + (s.t1 - s.t0) * frac;
+      const s0 = Date.now();
+      const data = await page.evaluate((tt) => window.dampf.snap(tt, 'image/png'), t);
+      const nm = s.name.replace(/[^A-Za-z0-9ÄÖÜäöüß. ]/g, '').replace(/ /g, '_');
+      fs.writeFileSync(path.join(out, nm + '.png'), Buffer.from(data.split(',')[1], 'base64'));
+      console.log(`shot ${s.name} t=${t.toFixed(2)} ${((Date.now() - s0) / 1000).toFixed(2)}s`);
+    }
+  }
+  if (args.views) {
+    // JSON file: [{name, pos:[x,y,z], look:[x,y,z], fov, t}]
+    const views = JSON.parse(fs.readFileSync(args.views, 'utf8'));
+    for (const v of views) {
+      const s0 = Date.now();
+      const data = await page.evaluate((vv) => { if (vv.pos) window.dampfDebugCam(vv.pos, vv.look, vv.fov || 45); return window.dampf.snap(vv.t ?? 0, 'image/png'); }, v);
+      fs.writeFileSync(path.join(out, v.name + '.png'), Buffer.from(data.split(',')[1], 'base64'));
+      console.log(`view ${v.name} ${((Date.now() - s0) / 1000).toFixed(2)}s`);
+    }
+  }
   if (args.range) {
     const [a, bnd] = String(args.range).split(',').map(Number);
     const fps = +(args.fps || 30);

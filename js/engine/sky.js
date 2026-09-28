@@ -29,7 +29,7 @@ void main() {
   vDir = position;
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vec4 cp = projectionMatrix * viewMatrix * wp;
-  gl_Position = cp.xyww; // at far plane
+  gl_Position = vec4(cp.xy, cp.w * 0.99999, cp.w); // just inside the far plane
 }`;
 
 const DOME_FRAG = /* glsl */ `
@@ -159,7 +159,8 @@ export function createSky({ radius = 9000, clouds = 46, seed = 5, ring = [1600, 
     }),
   );
   dome.frustumCulled = false;
-  dome.renderOrder = -10;
+  // drawn after all opaque geometry: early depth test skips every covered pixel
+  dome.renderOrder = 20;
   group.add(dome);
 
   // cloud billboards
@@ -193,7 +194,7 @@ export function createSky({ radius = 9000, clouds = 46, seed = 5, ring = [1600, 
     side: THREE.DoubleSide,
   }));
   cloudMesh.frustumCulled = false;
-  cloudMesh.renderOrder = -9;
+  cloudMesh.renderOrder = 19;
   group.add(cloudMesh);
   group.userData = { dome, cloudMesh, list };
   return group;

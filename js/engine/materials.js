@@ -186,10 +186,12 @@ vec4 triBrush(float layer, vec3 wp, vec3 n, float scale) {
   w = w * w; w = w * w;
   w /= (w.x + w.y + w.z + 1e-5);
   vec3 p = wp / scale;
-  vec4 tx = texture(uBrush, vec3(p.zy * vec2(sign(n.x), 1.0), layer));
-  vec4 ty = texture(uBrush, vec3(p.xz, layer));
-  vec4 tz = texture(uBrush, vec3(p.xy * vec2(-sign(n.z), 1.0), layer));
-  return tx * w.x + ty * w.y + tz * w.z;
+  // axis aligned faces (most of the city) need a single fetch
+  vec4 acc = vec4(0.0);
+  if (w.x > 0.02) acc += texture(uBrush, vec3(p.zy * vec2(sign(n.x), 1.0), layer)) * w.x;
+  if (w.y > 0.02) acc += texture(uBrush, vec3(p.xz, layer)) * w.y;
+  if (w.z > 0.02) acc += texture(uBrush, vec3(p.xy * vec2(-sign(n.z), 1.0), layer)) * w.z;
+  return acc / max(w.x * step(0.02, w.x) + w.y * step(0.02, w.y) + w.z * step(0.02, w.z), 1e-4);
 }
 `;
 
@@ -246,6 +248,17 @@ void main() {
   float bias = (br.a - 0.5) * 0.45;
   float spec = vMat.z / 255.0;
   float emis = vMat.w / 255.0 * 8.0 * uEmissiveBoost;
+  if (abs(layerCode - 116.0) < 0.5) {
+    // far facade windows: glass where A = 0; some windows glow warm
+    bias = 0.0;
+    float glass = 1.0 - smoothstep(0.1, 0.3, br.a);
+    vec2 cell = floor(vUv / scale * 4.0);
+    float h = fract(sin(dot(cell + vCol.a * 97.0, vec2(12.9898, 78.233))) * 43758.5453);
+    float lit = step(1.0 - 0.28 * uWindowGlow, h) + step(0.999, uWindowGlow) * step(0.25, h);
+    vec3 gcol = mix(vec3(0.05, 0.07, 0.11), vec3(1.0, 0.55, 0.2) * 2.2, clamp(lit, 0.0, 1.0));
+    albedo = mix(albedo, gcol, glass);
+    emis = max(emis, glass * lit * 1.0);
+  }
   float sh = sunShadow(vWP, N);
   float ao = groundAO(vWP);
   vec3 col = toonShade(albedo, N, vWP, bias, spec, 1.0, sh, ao);
@@ -288,6 +301,17 @@ export const BLEND_ALPHA = {
   blending: THREE.CustomBlending,
   blendEquation: THREE.AddEquation,
   blendSrc: THREE.SrcAlphaFactor,
+  blendDst: THREE.OneMinusSrcAlphaFactor,
+  blendSrcAlpha: THREE.ZeroFactor,
+  blendDstAlpha: THREE.OneFactor,
+};
+// premultiplied blend that also fades the normal/depth attachment and the ink id under the
+// fragment (steam hides the ink lines of whatever is behind it); fragment writes
+// oColor = vec4(rgb * a, a) and oNormal = vec4(0, 0, 0, a)
+export const BLEND_VEIL = {
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.AddEquation,
+  blendSrc: THREE.OneFactor,
   blendDst: THREE.OneMinusSrcAlphaFactor,
   blendSrcAlpha: THREE.ZeroFactor,
   blendDstAlpha: THREE.OneFactor,

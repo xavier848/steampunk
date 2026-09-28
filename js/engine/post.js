@@ -38,6 +38,30 @@ void main() {
   oFrag = vec4(c, 1.0);
 }`;
 
+// Fills single pixel holes (hairline cracks between abutting parts show the sky through
+// one pixel; the ink pass would circle every one of them with a dot).
+const FIX = /* glsl */ `
+layout(location = 1) out vec4 oND;
+uniform sampler2D tHDR; uniform sampler2D tND;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  ivec2 mx = textureSize(tND, 0) - 1;
+  vec4 c = texelFetch(tHDR, p, 0), n = texelFetch(tND, p, 0);
+  ivec2 pl = clamp(p + ivec2(-1, 0), ivec2(0), mx), pr = clamp(p + ivec2(1, 0), ivec2(0), mx);
+  ivec2 pd = clamp(p + ivec2(0, -1), ivec2(0), mx), pu = clamp(p + ivec2(0, 1), ivec2(0), mx);
+  vec4 nl = texelFetch(tND, pl, 0), nr = texelFetch(tND, pr, 0), nb = texelFetch(tND, pd, 0), nt = texelFetch(tND, pu, 0);
+  bool hh = n.w > 1.06 * max(nl.w, nr.w) + 0.05;
+  bool vv = n.w > 1.06 * max(nb.w, nt.w) + 0.05;
+  if (hh || vv) {
+    ivec2 a = hh ? pl : pd, b = hh ? pr : pu;
+    vec4 na = hh ? nl : nb, nc = hh ? nr : nt;
+    vec4 ca = texelFetch(tHDR, a, 0), cb = texelFetch(tHDR, b, 0);
+    c = vec4(0.5 * (ca.rgb + cb.rgb), na.w <= nc.w ? ca.a : cb.a); // ids are never averaged
+    n = 0.5 * (na + nc);
+  }
+  oFrag = c; oND = n;
+}`;
+
 const TENSOR = /* glsl */ `
 uniform sampler2D tSrc; uniform vec2 uTexel;
 void main() {
@@ -217,6 +241,7 @@ uniform vec3 uShadowTone; uniform vec3 uHighTone; uniform float uToneAmt; unifor
 uniform float uVignette; uniform vec3 uVignetteColor; uniform float uCanvas; uniform float uFade; uniform vec3 uFadeColor;
 uniform vec4 uTitleRect; uniform float uTitleOpacity;
 uniform float uLift;
+uniform float uInkMode;
 
 float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
@@ -233,6 +258,7 @@ void main() {
   offs[0] = vec2(1, 0); offs[1] = vec2(-1, 0); offs[2] = vec2(0, 1); offs[3] = vec2(0, -1);
   offs[4] = vec2(0.7, 0.7); offs[5] = vec2(-0.7, 0.7); offs[6] = vec2(0.7, -0.7); offs[7] = vec2(-0.7, -0.7);
   float nEdge = 0.0, dEdge = 0.0, iEdge = 0.0;
+  vec3 n0 = normalize(nd0.xyz + vec3(0.0, 0.0, 1e-4));
   for (int k = 0; k < 8; k++) {
     vec2 uv = vUv + offs[k] * o;
     vec4 nd = texture(tND, uv);
@@ -240,15 +266,18 @@ void main() {
     // silhouette: neighbour is clearly behind us (line drawn on the front object)
     float rel = (dk - d0) / d0;
     dEdge = max(dEdge, smoothstep(0.035, 0.09, rel));
-    // creases
-    float nd_ = dot(nd0.xyz, nd.xyz);
+    // creases (normals may be shortened by steam, so compare directions only)
+    float nd_ = dot(n0, normalize(nd.xyz + vec3(0.0, 0.0, 1e-4)));
     nEdge = max(nEdge, smoothstep(0.55, 0.3, nd_) * step(abs(rel), 0.08));
     float idk = texture(tHDR, uv).a;
     iEdge = max(iEdge, step(0.004, abs(idk - id0)) * step(-0.01, rel));
   }
+  if (uInkMode > 0.5) { dEdge *= step(abs(uInkMode - 1.0), 0.1); nEdge *= step(abs(uInkMode - 2.0), 0.1); iEdge *= step(abs(uInkMode - 3.0), 0.1); }
   ink = max(dEdge, max(nEdge * 0.85, iEdge * 0.9));
   float far = smoothstep(uInkD1 * 0.6, uInkFade, d0);
-  ink *= (1.0 - far) * uInkOpacity;
+  // no ink where steam veiled the geometry (normals faded toward zero)
+  float veil = smoothstep(0.35, 0.85, length(nd0.xyz));
+  ink *= (1.0 - far) * uInkOpacity * veil;
   // lines pick up a little of the local colour so they read as paint, not vector strokes
   vec3 inkCol = mix(uInk, col * 0.35, 0.25);
   col = mix(col, inkCol, clamp(ink, 0.0, 1.0));
@@ -308,6 +337,7 @@ export class Post {
 
     const HF = { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
     this.rtMain = new THREE.WebGLRenderTarget(2, 2, { count: 2, type: THREE.HalfFloatType, samples: this.samples, depthBuffer: true, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+    this.rtFix = new THREE.WebGLRenderTarget(2, 2, { count: 2, type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     this.rtTone = new THREE.WebGLRenderTarget(2, 2, HF);
     this.rtT1 = new THREE.WebGLRenderTarget(2, 2, HF);
     this.rtT2 = new THREE.WebGLRenderTarget(2, 2, HF);
@@ -321,6 +351,7 @@ export class Post {
     this.rtRays = new THREE.WebGLRenderTarget(2, 2, HF);
     this.rtOut = null;
 
+    this.mFix = passMat(FIX, { tHDR: { value: null }, tND: { value: null } });
     this.mTone = passMat(TONE, { tSrc: { value: null }, uExposure: { value: 1 } });
     this.mTensor = passMat(TENSOR, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.mBlur = passMat(BLUR, { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } });
@@ -342,7 +373,7 @@ export class Post {
       uContrast: { value: 1.08 }, uSat: { value: 1.12 }, uLift: { value: 0.0 },
       uVignette: { value: 0.45 }, uVignetteColor: { value: new THREE.Color(0.55, 0.45, 0.62) }, uCanvas: { value: 0.07 },
       uFade: { value: 1 }, uFadeColor: { value: new THREE.Color(0, 0, 0) },
-      uTitleRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uTitleOpacity: { value: 0 },
+      uTitleRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uTitleOpacity: { value: 0 }, uInkMode: { value: 0 },
     });
     this.params = {
       exposure: 1.0, kuwaRadius: 3, kuwaQ: 8, kuwaOn: true, bloom: 0.9, bloomThreshold: 1.1,
@@ -353,6 +384,7 @@ export class Post {
     if (w === this.w && h === this.h && !force) return;
     this.w = w; this.h = h;
     this.rtMain.setSize(w, h);
+    this.rtFix.setSize(w, h);
     this.rtTone.setSize(w, h);
     const ks = this.params.kuwaScale;
     const kw = Math.max(2, Math.round(w * ks)), kh = Math.max(2, Math.round(h * ks));
@@ -397,7 +429,10 @@ export class Post {
   finish(target = null) {
     const p = this.params;
     const W = this.w, H = this.h;
-    const hdr = this.rtMain.textures[0], nd = this.rtMain.textures[1];
+    this.mFix.uniforms.tHDR.value = this.rtMain.textures[0];
+    this.mFix.uniforms.tND.value = this.rtMain.textures[1];
+    this._run(this.mFix, this.rtFix, 'fix');
+    const hdr = this.rtFix.textures[0], nd = this.rtFix.textures[1];
     // tone
     this.mTone.uniforms.tSrc.value = hdr;
     this.mTone.uniforms.uExposure.value = p.exposure;

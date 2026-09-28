@@ -38,16 +38,20 @@ export class Gears {
     this._q = new THREE.Quaternion(); this._q2 = new THREE.Quaternion(); this._m = new THREE.Matrix4(); this._s = new THREE.Vector3();
     this.update(0);
   }
-  update(S) {
+  update(S, cam = null, maxDist = 260) {
     const z = new THREE.Vector3(0, 0, 1);
     for (const mesh of this.meshes) {
-      mesh.userData.items.forEach((g, i) => {
+      // only gears near the camera are drawn (compacted to the front of the buffer)
+      let n = 0;
+      for (const g of mesh.userData.items) {
+        if (cam && g.pos.distanceTo(cam) > maxDist * Math.max(1, g.r / 1.5)) continue;
         this._q.setFromUnitVectors(z, g.nrm);
         this._q2.setFromAxisAngle(z, (g.phase || 0) + S * g.speed);
         this._q.multiply(this._q2);
         this._m.compose(g.pos, this._q, this._s.set(g.r, g.r, g.r));
-        mesh.setMatrixAt(i, this._m);
-      });
+        mesh.setMatrixAt(n++, this._m);
+      }
+      mesh.count = n;
       mesh.instanceMatrix.needsUpdate = true;
     }
   }

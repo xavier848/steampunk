@@ -5,7 +5,7 @@
 // Local frame: facade faces +Z, x runs along the facade, y up, base at y = 0.
 // No two visible faces are ever coplanar: trims always protrude by at least 4 cm.
 import * as THREE from 'three';
-import { P, M, Mseg, mul, gableRoof, pipeRun } from '../engine/geo.js';
+import { P, M, Mseg, mul, gableRoof, pipeRun, boxUV } from '../engine/geo.js';
 import { LAYER } from '../engine/textures.js';
 import { RNG } from '../core/rng.js';
 import { PAL } from './palette.js';
@@ -41,17 +41,40 @@ export function addBuilding(b, lot, X) {
   const mIron = { color: PAL.iron, layer: LAYER.IRON, scale: 1.5, spec: 0.35, emit: 0, id, uv: false };
   const mBrass = { color: PAL.brass, layer: LAYER.METAL, scale: 1.5, spec: 0.8, emit: 0, id, uv: false };
   const mCopper = { color: PAL.copper, layer: LAYER.METAL, scale: 1.5, spec: 0.7, emit: 0, id, uv: false };
+  // trims may only overhang the footprint on exposed (street corner) sides, otherwise the
+  // coplanar faces of two neighbours overlap and z-fight
+  let clampX = null;
   const box = (x0, x1, y0, y1, z0, z1, m, F = null) => {
+    if (clampX) { x0 = Math.max(x0, clampX[0]); x1 = Math.min(x1, clampX[1]); if (x1 - x0 < 0.005) return; }
     const mm = M((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, 0, 0, 0, Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0));
     b.add(P.box(), L(F ? mul(F, mm) : mm), m);
   };
+  const sidesList = lot.sides || ['front'];
+  const exL = sidesList.includes('left'), exR = sidesList.includes('right');
 
   // --- core body (inset behind the facade wall layer) -------------------------
-  box(-W / 2, W / 2, 0, H, -D / 2, D / 2 - WALL_T, mWall);
-  // plinth
-  box(-W / 2 - 0.08, W / 2 + 0.08, 0, 0.55, -D / 2 - 0.08, D / 2 + 0.1, mBase);
+  // lot.hole = {x, z, r} in local coordinates cuts a square shaft through body and roof
+  const hole = lot.hole;
+  const bodyBox = (y0, y1, zTop) => {
+    if (!hole) { box(-W / 2, W / 2, y0, y1, -D / 2, zTop, mWall); return; }
+    const hx0 = hole.x - hole.r, hx1 = hole.x + hole.r, hz0 = hole.z - hole.r, hz1 = hole.z + hole.r;
+    box(-W / 2, hx0, y0, y1, -D / 2, zTop, mWall);
+    box(hx1, W / 2, y0, y1, -D / 2, zTop, mWall);
+    box(hx0, hx1, y0, y1, -D / 2, hz0, mWall);
+    box(hx0, hx1, y0, y1, hz1, zTop, mWall);
+  };
+  bodyBox(0, H, D / 2 - WALL_T);
+  // plinth (a ring when a shaft passes through the house)
+  if (!hole) box(-W / 2 - (exL ? 0.08 : 0), W / 2 + (exR ? 0.08 : 0), 0, 0.55, -D / 2 - 0.08, D / 2 + 0.1, mBase);
+  else {
+    box(-W / 2 - 0.08, W / 2 + 0.08, 0, 0.55, D / 2 - 0.6, D / 2 + 0.1, mBase);
+    box(-W / 2 - 0.08, W / 2 + 0.08, 0, 0.55, -D / 2 - 0.08, -D / 2 + 0.6, mBase);
+    box(-W / 2 - 0.08, -W / 2 + 0.6, 0, 0.55, -D / 2 + 0.6, D / 2 - 0.6, mBase);
+    box(W / 2 - 0.6, W / 2 + 0.08, 0, 0.55, -D / 2 + 0.6, D / 2 - 0.6, mBase);
+  }
 
   const litChance = lot.lit ?? 0.28;
+  const detail = lot.detail ?? 2;
 
   // --- facade builder -----------------------------------------------------------
   // F maps facade space (u along, v up, n outward; wall occupies n in [-WALL_T, 0]) to local.
@@ -110,7 +133,7 @@ export function addBuilding(b, lot, X) {
         box(x + ww / 2, x + ww / 2 + 0.12, sillY, topY, zB - 0.02, zB + 0.06, mTrim, F);
       }
       // shutters
-      if (opts.shutters && r.chance(0.55)) {
+      if (detail > 1 && opts.shutters && r.chance(0.55)) {
         const sc = { ...mFrame, color: lot.shutter ?? r.pick(PAL.shutter), layer: LAYER.WOOD, scale: 1.0 };
         const open = r.chance(0.7);
         if (open) {
@@ -119,7 +142,7 @@ export function addBuilding(b, lot, X) {
         }
       }
       // flower box
-      if (opts.flowers && r.chance(0.3)) {
+      if (detail > 1 && opts.flowers && r.chance(0.3)) {
         box(x - ww / 2, x + ww / 2, sillY - 0.02, sillY + 0.22, zB + 0.16, zB + 0.4, { ...mFrame, color: 0x6b4a32 }, F);
         for (let k = 0; k < 5; k++) {
           b.add(P.sphere(6, 4), L(mul(F, M(x - ww / 2 + 0.12 + k * (ww - 0.24) / 4, sillY + 0.3, zB + 0.28, 0, 0, 0, 0.14))), { color: r.pick([0x4f7a3a, 0x5d8a44, 0xc0465a, 0xe0a040]), layer: LAYER.BRUSH, scale: 0.6, spec: 0, emit: 0, id, uv: false });
@@ -260,6 +283,8 @@ export function addBuilding(b, lot, X) {
     const F = facadeF(side);
     const width = side === 'front' || side === 'back' ? W : D;
     const main = side === 'front';
+    // front facade: neighbours left and right unless the house is on a corner
+    clampX = main ? [-width / 2 - (exL ? 0.3 : 0), width / 2 + (exR ? 0.3 : 0)] : null;
     groundFloor(F, width, main);
     const ww = lot.ww ?? r.pick([1.05, 1.15, 1.25]);
     const xs = windowsFor(width, ww, style === 'timber' ? 1.0 : 1.25);
@@ -288,8 +313,8 @@ export function addBuilding(b, lot, X) {
         box(width / 2 - 0.05, width / 2, y0, y0 + fH, -WALL_T, n0 - WALL_T + 0.001, mWall, F);
       }
     }
-    // corner quoins
-    if (style === 'brick' || style === 'plaster') {
+    // corner quoins (only on exposed corners of the main facade)
+    if ((style === 'brick' || style === 'plaster') && (!main || exL || exR)) {
       for (let y = gH; y < H - 0.3; y += 0.6) {
         const alt = Math.round((y - gH) / 0.6) % 2;
         box(-width / 2 - 0.05, -width / 2 + (alt ? 0.55 : 0.35), y, y + 0.5, -0.1, 0.06, mTrim, F);
@@ -297,6 +322,7 @@ export function addBuilding(b, lot, X) {
       }
     }
   }
+  clampX = null;
   // blank facades on the non-street sides (with a few small windows)
   for (const side of ['front', 'back', 'left', 'right']) {
     if (sides.includes(side)) continue;
@@ -314,13 +340,32 @@ export function addBuilding(b, lot, X) {
   const tileCol = lot.tile ?? (roofType === 'mansard' ? r.pick(PAL.slate.concat(PAL.zinc)) : r.pick(PAL.tile.concat(PAL.slate)));
   const roofLayer = PAL.slate.includes(tileCol) || PAL.zinc.includes(tileCol) ? LAYER.SLATE : LAYER.TILE;
   const mRoof = { color: tileCol, layer: roofLayer, scale: 2.4, spec: 0.05, emit: 0, id, uv: true };
-  if (style !== 'timber' || roofType === 'flat' || roofType === 'mansard') {
-    // cornice
-    b.add(P.box(), RT(M(0, 0.12, 0, 0, 0, 0, W + 0.5, 0.24, RD + 0.5)), mTrim);
-    b.add(P.box(), RT(M(0, -0.12, 0, 0, 0, 0, W + 0.3, 0.26, RD + 0.3)), { ...mTrim, color: PAL.stoneDark[0] });
+  const cxA = -W / 2 - (exL ? 0.25 : 0), cxB = W / 2 + (exR ? 0.25 : 0);
+  // cornice height jittered per house so neighbours never share a plane
+  const cj = r.range(0, 0.05);
+  const corniceTop = 0.24 + cj;
+  if (roofType !== 'custom' && (style !== 'timber' || roofType === 'flat' || roofType === 'mansard')) {
+    if (roofType === 'flat') {
+      // a raised rim around the recessed flat roof (keeps the roof and any shaft open)
+      const rim = 0.6, zA = -RD / 2 - 0.25, zB = RD / 2 + 0.25;
+      const ring = (x0, x1, z0, z1) => b.add(P.box(), RT(M((x0 + x1) / 2, corniceTop / 2, (z0 + z1) / 2, 0, 0, 0, x1 - x0, corniceTop, z1 - z0)), mTrim);
+      ring(cxA, cxB, zB - rim, zB); ring(cxA, cxB, zA, zA + rim);
+      ring(cxA, cxA + rim, zA + rim, zB - rim); ring(cxB - rim, cxB, zA + rim, zB - rim);
+    } else {
+      b.add(P.box(), RT(M((cxA + cxB) / 2, corniceTop / 2, 0, 0, 0, 0, cxB - cxA, corniceTop, RD + 0.5)), mTrim);
+    }
+    const band = { ...mTrim, color: PAL.stoneDark[0] };
+    if (roofType === 'flat') {
+      const zA = -RD / 2 - 0.15, zB = RD / 2 + 0.15, xA = cxA + 0.05, xB = cxB - 0.05, w = 0.4;
+      const bx = (x0, x1, z0, z1) => b.add(P.box(), RT(M((x0 + x1) / 2, -0.13, (z0 + z1) / 2, 0, 0, 0, x1 - x0, 0.24, z1 - z0)), band);
+      bx(xA, xB, zB - w, zB); bx(xA, xB, zA, zA + w); bx(xA, xA + w, zA + w, zB - w); bx(xB - w, xB, zA + w, zB - w);
+    } else b.add(P.box(), RT(M((cxA + cxB) / 2, -0.13, 0, 0, 0, 0, cxB - cxA - 0.1, 0.24, RD + 0.3)), band);
   }
   let roofTop = H;
-  if (roofType === 'gableStreet' || roofType === 'gableSide') {
+  let ridge = H + 1.0; // chimney reference height (not raised by tanks or domes)
+  if (roofType === 'custom') {
+    roofTop = H + 0.5;
+  } else if (roofType === 'gableStreet' || roofType === 'gableSide') {
     const along = roofType === 'gableStreet';
     const span = along ? W : RD;
     const len = along ? RD : W;
@@ -328,7 +373,7 @@ export function addBuilding(b, lot, X) {
     const g = gableRoof(len, span, rh, 0.45, { ends: !along });
     const rot = along ? M(0, 0.05, 0, 0, Math.PI / 2, 0) : M(0, 0.05, 0);
     b.add(g, RT(rot), mRoof);
-    roofTop = H + rh;
+    roofTop = H + rh; ridge = H + rh;
     if (X) X.roofs.push({ type: along ? 'gableZ' : 'gableX', matrix: RT(rot), len, span, h: rh });
     if (along) {
       // decorated front gable wall (triangle) with a round window
@@ -389,7 +434,7 @@ export function addBuilding(b, lot, X) {
     b.add(geo, RT(M(0, 0.24, 0)), mRoof);
     // flat top with a zinc cap
     b.add(P.box(), RT(M(0, 0.24 + h1 + 0.1, 0, 0, 0, 0, W + 0.3 - inset * 2 + 0.1, 0.2, RD + 0.3 - inset * 2 + 0.1)), { ...mRoof, uv: false, color: PAL.zinc[0], layer: LAYER.METAL, scale: 3, spec: 0.2 });
-    roofTop = H + h1 + 0.4;
+    roofTop = H + h1 + 0.4; ridge = roofTop;
     // dormers in the steep slope
     const nd = Math.max(1, Math.floor(W / 3.0));
     for (let i = 0; i < nd; i++) {
@@ -403,16 +448,27 @@ export function addBuilding(b, lot, X) {
     if (X) X.roofs.push({ type: 'mansard', matrix: RT(M(0, 0, 0)), w: W, d: RD, h: h1 });
   } else if (roofType === 'flat') {
     // parapet with a balustrade look
-    const pt = 0.25, ph = 1.0;
-    b.add(P.box(), RT(M(0, 0.03, 0, 0, 0, 0, W - 0.02, 0.06, RD - 0.02)), { ...mTrim, color: 0x5a4c48, layer: LAYER.BRUSH, scale: 2 });
-    b.add(P.box(), RT(M(0, ph / 2 + 0.24, RD / 2 + 0.2 - pt / 2, 0, 0, 0, W + 0.5, ph, pt)), mTrim);
-    b.add(P.box(), RT(M(0, ph / 2 + 0.24, -RD / 2 - 0.2 + pt / 2, 0, 0, 0, W + 0.5, ph, pt)), mTrim);
-    b.add(P.box(), RT(M(W / 2 + 0.2 - pt / 2, ph / 2 + 0.24, 0, 0, 0, 0, pt, ph, RD + 0.4 - 2 * pt)), mTrim);
-    b.add(P.box(), RT(M(-W / 2 - 0.2 + pt / 2, ph / 2 + 0.24, 0, 0, 0, 0, pt, ph, RD + 0.4 - 2 * pt)), mTrim);
+    const pt = 0.25, ph = lot.parapet ?? 1.0;
+    const mTar = { ...mTrim, color: lot.tar ?? 0x5a4c48, layer: LAYER.BRUSH, scale: 2 };
+    if (!hole) b.add(P.box(), RT(M(0, 0.03, 0, 0, 0, 0, W - 0.02, 0.06, RD - 0.02)), mTar);
+    else {
+      const hx0 = hole.x - hole.r, hx1 = hole.x + hole.r, hz0 = hole.z - hole.r - dz, hz1 = hole.z + hole.r - dz;
+      const W2 = W - 0.02, D2 = RD - 0.02;
+      const slab = (x0, x1, z0, z1) => b.add(P.box(), RT(M((x0 + x1) / 2, 0.03, (z0 + z1) / 2, 0, 0, 0, x1 - x0, 0.06, z1 - z0)), mTar);
+      slab(-W2 / 2, hx0, -D2 / 2, D2 / 2); slab(hx1, W2 / 2, -D2 / 2, D2 / 2);
+      slab(hx0, hx1, -D2 / 2, hz0); slab(hx0, hx1, hz1, D2 / 2);
+    }
+    const pA = -W / 2 - (exL ? 0.2 : 0), pB = W / 2 + (exR ? 0.2 : 0);
+    // the parapet sinks 4 cm into the cornice rim: never a see-through slit between them
+    const py = corniceTop - 0.04 + ph / 2 + 0.02;
+    b.add(P.box(), RT(M((pA + pB) / 2, py, RD / 2 + 0.2 - pt / 2, 0, 0, 0, pB - pA, ph + 0.04, pt)), mTrim);
+    b.add(P.box(), RT(M((pA + pB) / 2, py, -RD / 2 - 0.2 + pt / 2, 0, 0, 0, pB - pA, ph + 0.04, pt)), mTrim);
+    b.add(P.box(), RT(M(pB - pt / 2, py, 0, 0, 0, 0, pt, ph + 0.04, RD + 0.4 - 2 * pt)), mTrim);
+    b.add(P.box(), RT(M(pA + pt / 2, py, 0, 0, 0, 0, pt, ph + 0.04, RD + 0.4 - 2 * pt)), mTrim);
     roofTop = H + 1.3;
     // water tank on legs
-    if (r.chance(0.6)) {
-      const tx = r.range(-W / 4, W / 4), tz = r.range(-RD / 4, 0);
+    if (lot.tank ?? r.chance(0.6)) {
+      const tx = lot.tankPos ? lot.tankPos[0] : r.range(-W / 4, W / 4), tz = lot.tankPos ? lot.tankPos[1] : r.range(-RD / 4, 0);
       const tr = r.range(1.0, 1.5);
       for (const [a, c] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) b.add(P.cylB(6), RT(M(tx + a * tr * 0.6, 0.2, tz + c * tr * 0.6, 0, 0, 0, 0.08, 2.2, 0.08)), mIron);
       b.add(P.cylB(16), RT(M(tx, 2.3, tz, 0, 0, 0, tr, 2.4, tr)), { ...mCopper, color: r.pick([PAL.copper, PAL.patina[1], 0x6a5040]) });
@@ -442,10 +498,11 @@ export function addBuilding(b, lot, X) {
   }
 
   // --- chimneys ----------------------------------------------------------------------
-  const nc = lot.chimneys ?? r.int(1, 3);
+  const nc = lot.chimneys ?? (detail > 1 ? r.int(1, 3) : r.int(1, 2));
   for (let i = 0; i < nc; i++) {
-    const cx = r.range(-W / 2 + 0.8, W / 2 - 0.8), cz = r.range(-RD / 2 + 1.0, RD / 2 - 1.5) + dz;
-    const ch = roofTop - H + r.range(0.6, 1.6);
+    let cx = r.range(-W / 2 + 0.8, W / 2 - 0.8), cz = r.range(-RD / 2 + 1.0, RD / 2 - 1.5) + dz;
+    if (lot.chimneyPos && lot.chimneyPos[i]) [cx, cz] = lot.chimneyPos[i];
+    const ch = ridge - H + r.range(0.6, 1.4);
     const mCh = { color: r.pick(PAL.brick), layer: LAYER.BRICK, scale: 2.2, spec: 0, emit: 0, id, uv: false };
     b.add(P.boxB(), L(M(cx, H - 0.5, cz, 0, 0, 0, 0.7, ch + 0.5, 0.55)), mCh);
     b.add(P.boxB(), L(M(cx, H + ch - 0.05, cz, 0, 0, 0, 0.86, 0.18, 0.72)), mTrim);
@@ -455,7 +512,7 @@ export function addBuilding(b, lot, X) {
 
   // --- steampunk details on the main facade ---------------------------------------------
   const Ff = mul(front, M(0, 0, 0));
-  if (lot.pipes ?? r.chance(0.75)) {
+  if (detail > 1 && (lot.pipes ?? r.chance(0.75))) {
     const np = r.int(1, 2);
     for (let i = 0; i < np; i++) {
       const px = (i === 0 ? -1 : 1) * (W / 2 - r.range(0.25, 0.5));
@@ -481,7 +538,7 @@ export function addBuilding(b, lot, X) {
       if (X) X.vents.push({ pos: vp, dir: new THREE.Vector3(px < 0 ? -1 : 1, 0.3, 0.6).transformDirection(L(Ff)), seed: r.int(0, 9999) });
     }
   }
-  if (lot.gear ?? r.chance(0.35)) {
+  if (detail > 0 && (lot.gear ?? r.chance(0.35))) {
     // big wall gear pair on a blank area of the facade (top floor, beside windows) or gable
     const gr = lot.gearR ?? r.range(0.9, 1.6);
     const gx = lot.gearX ?? (r.sign() * (W / 2 - gr - 0.2));
@@ -500,7 +557,7 @@ export function addBuilding(b, lot, X) {
     // back plate
     b.add(P.cyl(20), mul(L(Ff), M(gx, gy, zz - 0.12, Math.PI / 2, 0, 0, gr * 0.5, 0.1, gr * 0.5)), mIron);
   }
-  if (lot.balcony ?? r.chance(0.35)) {
+  if (detail > 1 && (lot.balcony ?? r.chance(0.35))) {
     const f = r.int(0, Math.max(0, floors - 2));
     const y = gH + f * fH + 0.05;
     const bw = Math.min(W - 1.0, r.range(2.4, 4.2));
@@ -516,7 +573,7 @@ export function addBuilding(b, lot, X) {
     // brackets
     for (const x of [bx - bw / 2 + 0.2, bx + bw / 2 - 0.2]) b.add(P.box(), mul(L(Ff), M(x, y - 0.35, n0 + 0.4, -0.8, 0, 0, 0.1, 0.8, 0.1)), rail);
   }
-  if (lot.hangingSign ?? r.chance(0.5)) {
+  if (detail > 1 && (lot.hangingSign ?? r.chance(0.5))) {
     const sx = r.sign() * (W / 2 - 0.4);
     const sy = gH + 0.4;
     const arm = { ...mIron };
@@ -524,7 +581,7 @@ export function addBuilding(b, lot, X) {
     b.add(P.box(), mul(L(Ff), M(sx, sy + 0.55, 0.55, 0.7, 0, 0, 0.03, 0.03, 0.8)), arm);
     if (X) X.hanging.push({ matrix: L(mul(Ff, M(sx, sy + 0.35, 0.72, 0, Math.PI / 2, 0))), w: 0.9, h: 0.7, idx: r.int(0, 15), id });
   }
-  if (lot.wallLamp ?? r.chance(0.6)) {
+  if (detail > 1 && (lot.wallLamp ?? r.chance(0.6))) {
     const lx = r.sign() * (W / 2 - r.range(0.9, 1.4));
     const ly = gH - 0.2;
     const lp = new THREE.Vector3(lx, ly, 0.55 + 0.1).applyMatrix4(L(Ff));
@@ -551,4 +608,50 @@ export function mansardGeometry(w, d, h, inset) {
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.computeVertexNormals();
   return g;
+}
+
+
+// Low detail house for the far city: textured walls (window grid layer), simple roof.
+export function addSimpleBuilding(b, lot, X) {
+  const r = new RNG(lot.seed || 1);
+  const T = new THREE.Matrix4().makeRotationY(lot.rot || 0).setPosition(lot.x, lot.y || 0, lot.z);
+  const L = (m) => mul(T, m);
+  const W = lot.w, D = lot.d, H = lot.h ?? r.range(12, 24);
+  const id = r.range(0.05, 0.95);
+  const wall = lot.wall ?? r.pick(PAL.plaster.concat(PAL.stone, PAL.brick));
+  b.add(boxUV(W, H, D), L(M(0, H / 2, 0)), { color: wall, layer: LAYER.FACADE, scale: 12, spec: 0, emit: 0, id, uv: true });
+  // cornice band
+  b.add(P.box(), L(M(0, H + 0.15, 0, 0, 0, 0, W + 0.4, 0.3, D + 0.4)), { color: r.pick(PAL.stone), layer: LAYER.STONE, scale: 3, spec: 0, emit: 0, id, uv: false });
+  const roof = lot.roof || r.pick(['gable', 'gable', 'mansard', 'flat', 'gableX']);
+  const tile = r.pick(PAL.tile.concat(PAL.slate, PAL.tile));
+  const mRoof = { color: tile, layer: PAL.slate.includes(tile) ? LAYER.SLATE : LAYER.TILE, scale: 2.4, spec: 0.05, emit: 0, id, uv: true };
+  let top = H;
+  if (roof === 'gable' || roof === 'gableX') {
+    const along = roof === 'gable';
+    const rh = (along ? W : D) * r.range(0.35, 0.55);
+    b.add(gableRoof(along ? D : W, along ? W : D, rh, 0.3, { ends: true }), L(M(0, H + 0.3, 0, 0, along ? Math.PI / 2 : 0, 0)), mRoof);
+    top = H + rh;
+  } else if (roof === 'mansard') {
+    b.add(mansardGeometry(W + 0.2, D + 0.2, 2.4, 0.9), L(M(0, H + 0.3, 0)), { ...mRoof, color: r.pick(PAL.slate.concat(PAL.zinc)), layer: LAYER.SLATE });
+    b.add(P.box(), L(M(0, H + 2.8, 0, 0, 0, 0, W - 1.5, 0.2, D - 1.5)), { color: PAL.zinc[0], layer: LAYER.METAL, scale: 3, spec: 0.2, emit: 0, id, uv: false });
+    top = H + 2.9;
+  } else {
+    b.add(P.box(), L(M(0, H + 0.7, D / 2 - 0.1, 0, 0, 0, W + 0.4, 0.8, 0.25)), { color: r.pick(PAL.stone), layer: LAYER.STONE, scale: 3, spec: 0, emit: 0, id, uv: false });
+    if (r.chance(0.35)) {
+      const tr = r.range(1.2, 2.0);
+      b.add(P.cylB(10), L(M(r.range(-W / 4, W / 4), H + 2.2, r.range(-D / 4, D / 4), 0, 0, 0, tr, 2.6, tr)), { color: r.pick([PAL.copper, PAL.patina[1]]), layer: LAYER.METAL, scale: 2, spec: 0.5, emit: 0, id, uv: false });
+    }
+  }
+  const nc = r.int(1, 3);
+  for (let i = 0; i < nc; i++) {
+    const cx = r.range(-W / 2 + 1, W / 2 - 1), cz = r.range(-D / 2 + 1, D / 2 - 1);
+    const ch = top - H + r.range(0.8, 2.2);
+    b.add(P.boxB(), L(M(cx, H, cz, 0, 0, 0, 0.8, ch, 0.6)), { color: r.pick(PAL.brick), layer: LAYER.BRICK, scale: 2.2, spec: 0, emit: 0, id, uv: false });
+    if (X && r.chance(0.35)) X.chimneys.push({ pos: new THREE.Vector3(cx, H + ch + 0.4, cz).applyMatrix4(T), seed: r.int(0, 9999), strength: r.range(0.4, 0.8), far: true });
+  }
+  if (lot.gear && X) {
+    const gr = r.range(1.5, 3.0);
+    X.gears.push({ pos: new THREE.Vector3(0, H - gr - 1, D / 2 + 0.25).applyMatrix4(T), nrm: new THREE.Vector3(0, 0, 1).transformDirection(T), r: gr, teeth: 20, speed: r.range(0.1, 0.2) * r.sign(), color: PAL.brass });
+  }
+  return { H, top };
 }
