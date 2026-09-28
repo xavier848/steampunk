@@ -52,7 +52,13 @@ export function buildCity() {
   // clock tower square paving and a south square
   streets.add(P.box(), M(0, -0.2, (CITY.square.z0 + CITY.square.z1) / 2, 0, 0, 0, CITY.square.x1 - CITY.square.x0, 0.4, CITY.square.z1 - CITY.square.z0), { color: 0xa39482, layer: LAYER.FLAGSTONE, scale: 5, spec: 0, emit: 0, id: 0.02, uv: false });
   // ground plane under everything (dark courtyards)
-  streets.add(P.box(), M(0, -0.45, 0, 0, 0, 0, 1400, 0.5, 1400), { color: 0x6a5a50, layer: LAYER.COBBLE, scale: 4, spec: 0, emit: 0, id: 0.01, uv: false });
+  {
+    // with a square hole where the shaft goes down (x0..x1, z0..z1)
+    const gm = { color: 0x6a5a50, layer: LAYER.COBBLE, scale: 4, spec: 0, emit: 0, id: 0.01, uv: false };
+    const hx0 = CITY.hatch.x - 1.3, hx1 = CITY.hatch.x + 1.3, hz0 = CITY.hatch.z - 1.3, hz1 = CITY.hatch.z + 1.3, E = 700;
+    const slab = (x0, x1, z0, z1) => streets.add(P.box(), M((x0 + x1) / 2, -0.45, (z0 + z1) / 2, 0, 0, 0, x1 - x0, 0.5, z1 - z0), gm);
+    slab(-E, E, -E, hz0); slab(-E, E, hz1, E); slab(-E, hx0, hz0, hz1); slab(hx1, E, hz0, hz1);
+  }
 
   // ---------------------------------------------------------------- blocks
   const heroSkip = (x, z) => HERO_LOTS.some((h) => Math.abs(x - h.x) < h.d / 2 + 0.5 && Math.abs(z - h.z) < h.w / 2 + 0.5);

@@ -277,7 +277,9 @@ export class Crowd {
       mesh.frustumCulled = false;
       mesh.layers.enable(LAYER_DYN_CASTER);
       this.group.add(mesh);
-      this.kinds[kind] = { mesh, g, A, cap, n: 0 };
+      const K = { mesh, g, A, cap, n: 0, nVis: 0, nNear: 0, list: [] };
+      mesh.onBeforeRender = () => { g.instanceCount = mat.uniforms.uPass.value === 1 ? K.nNear : K.nVis; };
+      this.kinds[kind] = K;
     }
     this.people = [];
   }
@@ -285,26 +287,56 @@ export class Crowd {
     const K = this.kinds[person.kind];
     if (K.n >= K.cap) return null;
     person.slot = K.n++;
-    K.g.instanceCount = K.n;
-    const i = person.slot, A = K.A;
-    A.iShape.setXYZW(i, person.height, person.width, person.face, person.hat);
-    A.iColA.setXYZ(i, ...person.colA); A.iColB.setXYZ(i, ...person.colB); A.iColC.setXYZ(i, ...person.colC); A.iColS.setXYZ(i, ...person.skin);
-    for (const k of ['iShape', 'iColA', 'iColB', 'iColC', 'iColS']) A[k].needsUpdate = true;
+    person.dyn = new Float32Array(12);
+    person.dyn[1] = -500;
+    K.list = K.list || [];
+    K.list.push(person);
     this.people.push(person);
     return person;
   }
-  // write dynamic state for one person
-  setHat(person, hat) { const K = this.kinds[person.kind]; K.A.iShape.setW(person.slot, hat); K.A.iShape.needsUpdate = true; }
+  // write dynamic state for one person (uploaded compacted in commit)
+  setHat(person, hat) { person.hat = hat; }
   set(person, x, y, z, yaw, phase, gait, amp, startle, headYaw = 0, headPitch = 0, lean = 0) {
-    const K = this.kinds[person.kind], i = person.slot, A = K.A;
-    A.iPos.setXYZW(i, x, y, z, yaw);
-    A.iAnim.setXYZW(i, phase, gait, amp, startle);
-    A.iLook.setXYZW(i, headYaw, headPitch, lean, person.prop || 0);
+    const d = person.dyn;
+    d[0] = x; d[1] = y; d[2] = z; d[3] = yaw; d[4] = phase; d[5] = gait; d[6] = amp; d[7] = startle; d[8] = headYaw; d[9] = headPitch; d[10] = lean; d[11] = person.prop || 0;
   }
-  hide(person) { const K = this.kinds[person.kind]; K.A.iPos.setXYZW(person.slot, 0, -500, 0, 0); }
-  commit() {
-    for (const kind of ARCH) { const A = this.kinds[kind].A; A.iPos.needsUpdate = true; A.iAnim.needsUpdate = true; A.iLook.needsUpdate = true; }
+  hide(person) { person.dyn[1] = -500; }
+  // Only people inside the view (and not too far) are drawn; the ones near the shadow
+  // centre come first so the shadow pass can draw just that prefix.
+  commit(camera = null, shadowCenter = null, shadowRadius = 0, maxDist = 140) {
+    if (camera) { camera.updateMatrixWorld(); _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm); }
+    for (const kind of ARCH) {
+      const K = this.kinds[kind], A = K.A;
+      const vis = [];
+      for (const p of K.list || []) {
+        const d = p.dyn;
+        if (d[1] < -400) continue;
+        _sph.center.set(d[0], d[1] + 0.9, d[2]); _sph.radius = 1.3;
+        let near = false;
+        if (shadowCenter) { const dx = d[0] - shadowCenter.x, dz = d[2] - shadowCenter.z; near = dx * dx + dz * dz < shadowRadius * shadowRadius; }
+        if (camera && !near) {
+          if (_sph.center.distanceToSquared(camera.position) > maxDist * maxDist) continue;
+          if (!_fr.intersectsSphere(_sph)) continue;
+        }
+        vis.push([near ? 0 : 1, p]);
+      }
+      vis.sort((a, b) => a[0] - b[0]);
+      let nNear = 0;
+      vis.forEach(([f, p], i) => {
+        if (f === 0) nNear = i + 1;
+        const d = p.dyn;
+        A.iPos.setXYZW(i, d[0], d[1], d[2], d[3]);
+        A.iAnim.setXYZW(i, d[4], d[5], d[6], d[7]);
+        A.iLook.setXYZW(i, d[8], d[9], d[10], d[11]);
+        A.iShape.setXYZW(i, p.height, p.width, p.face, p.hat);
+        A.iColA.setXYZ(i, ...p.colA); A.iColB.setXYZ(i, ...p.colB); A.iColC.setXYZ(i, ...p.colC); A.iColS.setXYZ(i, ...p.skin);
+      });
+      K.nVis = vis.length; K.nNear = nNear;
+      K.g.instanceCount = vis.length;
+      for (const k in A) A[k].needsUpdate = true;
+    }
   }
 }
 
+const _pm = new THREE.Matrix4(), _fr = new THREE.Frustum(), _sph = new THREE.Sphere();
 export const GAIT = { walk: 0, stand: 1, talk: 2, haggle: 3, run: 4, carry: 5, cycle: 6 };

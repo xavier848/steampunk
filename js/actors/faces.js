@@ -6,8 +6,8 @@
 import * as THREE from 'three';
 import { RNG } from '../core/rng.js';
 
-export const FACE = { neutral: 0, determined: 1, surprised: 2, effort: 3, joy: 4, blink: 5, stern: 6, shout: 7, whistle: 8, puff: 9 };
-const CELL = 512, COLS = 4, ROWS = 3;
+export const FACE = { neutral: 0, determined: 1, surprised: 2, effort: 3, joy: 4, blink: 5, stern: 6, shout: 7, whistle: 8, puff: 9, smile: 12 };
+const CELL = 512, COLS = 4, ROWS = 4;
 
 const U = (u) => u * CELL, V = (v) => (1 - v) * CELL; // uv -> px inside a cell
 
@@ -220,6 +220,7 @@ export function createFaceAtlas() {
   const cell = (i, fn) => { ctx.save(); ctx.translate((i % COLS) * CELL, Math.floor(i / COLS) * CELL); ctx.beginPath(); ctx.rect(0, 0, CELL, CELL); ctx.clip(); fn(); ctx.restore(); };
   BOY.forEach((p, i) => cell(i, () => boyFace(ctx, p, r)));
   COP.forEach((p, i) => cell(6 + i, () => copFace(ctx, p)));
+  cell(12, () => copFace(ctx, { mouth: 'smile', browAng: -0.18, browY: -8, open: 0.7, happy: true }));
   for (const ci of [10, 11]) cell(ci, () => { for (let k = 0; k < 16; k++) crowdFace(ctx, (k % 4) * 128, Math.floor(k / 4) * 128, 128, r); });
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;

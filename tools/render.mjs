@@ -38,9 +38,13 @@ function serve() {
 async function main() {
   const srv = await serve();
   const port = srv.address().port;
+  // --gl llvmpipe: Mesa llvmpipe through ANGLE/OpenGL (run under xvfb-run); much faster
+  // than SwiftShader on many cores. Default: headless SwiftShader.
+  const common = ['--ignore-gpu-blocklist', '--disable-gpu-watchdog', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--js-flags=--max-old-space-size=4096'];
+  const llvm = args.gl === 'llvmpipe';
   const browser = await chromium.launch({
-    headless: true,
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--disable-gpu-watchdog', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--js-flags=--max-old-space-size=4096'],
+    headless: !llvm,
+    args: llvm ? ['--use-angle=gl', '--enable-gpu', ...common] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', ...common],
   });
   const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   if (THREE_DIR) {

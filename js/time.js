@@ -39,7 +39,13 @@ export class TimeMap {
 
 // Build the map from slow motion specs given in story time: the slow speed is fully
 // reached at story time s, holds for sDur story seconds, then ramps back.
-export function buildTimeMap(specs, rampIn = 0.9, rampOut = 1.4) {
+export function buildTimeMap(specs, rampIn = 0.9, rampOut = 1.4, offset = 0) {
+  const m = buildTimeMap0(specs, rampIn, rampOut);
+  if (!offset) return m;
+  // film time runs ahead of story time by a constant offset (a longer title flight)
+  return { keys: m.keys, S: (T) => m.S(T - offset), speed: (T) => m.speed(T - offset), T: (S) => m.T(S) + offset, offset };
+}
+function buildTimeMap0(specs, rampIn, rampOut) {
   const keys = [[-10, 1]];
   let lag = 0;
   for (const sp of specs) {

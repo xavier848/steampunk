@@ -144,7 +144,8 @@ export class Townsfolk {
     return out;
   }
 
-  update(S, camPos = null) {
+  update(S, camera = null, shadowCenter = null, shadowRadius = 0) {
+    const camPos = camera ? camera.position : null;
     const { boy, cop } = this.story;
     // pursuer samples over the last 1.5 s
     const samples = [];
@@ -190,6 +191,6 @@ export class Townsfolk {
       this.crowd.set(p, b.x + dx, b.y, b.z + dz, b.yaw, b.phase, gait, b.amp, startle, headYaw, 0, 0);
     }
     if (this.hatman) this.crowd.setHat(this.hatman, S < A.hat ? 1 : 0);
-    this.crowd.commit();
+    this.crowd.commit(camera, shadowCenter, shadowRadius);
   }
 }

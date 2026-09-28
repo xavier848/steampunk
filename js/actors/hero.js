@@ -32,10 +32,14 @@ void main() {
   gl_Position = projectionMatrix * mv;
 }`;
 const CHAR_FRAG = /* glsl */ `
-uniform sampler2D uFaceTex; uniform vec4 uFaceCell; uniform float uGlow; uniform float uRimBoost; uniform vec3 uTint;
+uniform sampler2D uFaceTex; uniform vec4 uFaceCell; uniform float uGlow; uniform float uRimBoost; uniform vec3 uTint; uniform float uCoreHide;
 in vec3 vWP; in vec3 vN; in vec4 vCol; in vec4 vMat; in vec2 vUv; in vec3 vVN; in float vDepth; in vec3 vRest;
 void main() {
+  // the brass core leaves the satchel (ids 0.80 core, 0.81 cage)
+  if (uCoreHide > 0.5 && vCol.a > 0.795 && vCol.a < 0.815) discard;
   if (uPass == 1) { oColor = vec4(0.0); oNormal = vec4(0.0); return; }
+  vec2 fuv0 = clamp(vUv, 0.0, 1.0) * uFaceCell.zw;
+  vec2 fGx = dFdx(fuv0), fGy = dFdy(fuv0);
   vec3 N = normalize(vN);
   vec3 VN = normalize(vVN);
   if (!gl_FrontFacing) { N = -N; VN = -VN; }
@@ -47,7 +51,9 @@ void main() {
   float bias = (br.a - 0.5) * 0.35;
   if (face > 0.5) {
     vec2 fuv = uFaceCell.xy + clamp(vUv, 0.0, 1.0) * uFaceCell.zw;
-    albedo = texture(uFaceTex, fuv).rgb; // sRGB texture: already linear when sampled
+    // explicit gradients: derivatives inside this branch are not reliable, and the
+    // painted features must stay crisp (the face is small on screen)
+    albedo = textureGrad(uFaceTex, fuv, fGx * 0.5, fGy * 0.5).rgb; // sRGB texture: already linear when sampled
     bias *= 0.3;
   }
   float sh = sunShadow(vWP, N);
@@ -63,7 +69,7 @@ export function charMaterial({ skinned = true } = {}) {
   if (!faceAtlas) faceAtlas = createFaceAtlas();
   return toonMaterial({
     vertex: CHAR_VERT, fragment: CHAR_FRAG,
-    uniforms: { uFaceTex: { value: faceAtlas }, uFaceCell: { value: new THREE.Vector4(...faceCell(0)) }, uGlow: { value: 1 }, uRimBoost: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) } },
+    uniforms: { uFaceTex: { value: faceAtlas }, uFaceCell: { value: new THREE.Vector4(...faceCell(0)) }, uGlow: { value: 1 }, uRimBoost: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) }, uCoreHide: { value: 0 } },
   });
 }
 

@@ -9,6 +9,7 @@ import { FACE } from '../actors/faces.js';
 import { CITY } from '../city/layout.js';
 import { ROOF } from '../city/rooftops.js';
 import { CURB_H } from '../city/street.js';
+import { HALL, MINE_RAIL_Z } from '../city/underworld.js';
 import { smoothstep, clamp, pulse } from '../core/math.js';
 
 const W = CURB_H; // pavement height
@@ -179,10 +180,137 @@ export function buildStory() {
   A.rim = boy.end;
   boy.move(v(14.75, ROOF.h6 + 1.22, -111.75), 1.5, (u, t) => POSE.blend([[POSE.climb(t), 1 - u * 0.5], [POSE.crouch(0.7), u * 0.8]]), { yaw: hatchYaw });
   A.jumpIn = boy.end;
-  boy.jump(v(CITY.hatch.x, ROOF.h6 - 0.4, CITY.hatch.z), { dur: 0.7, h: 0.35 });
+  // the boy hangs at the chain facing -z, the chain 10 cm in front of him
+  const CH = HALL.chain;
+  const grab = (y) => v(CH.x, y, CH.z + 0.1);
+  boy.jump(grab(ROOF.h6 - 0.9), { dur: 0.7, h: 0.35 });
   ev(A.jumpIn, 'jump');
   A.chain0 = boy.end;
+  ev(A.chain0, 'chainGrab');
   face(A.jumpIn, FACE.effort);
+
+  // ================================================================ 7 Der Schacht
+  const PI = Math.PI;
+  boy.pose(0.9, (u, t) => POSE.hang(t, Math.sin(u * PI) * 0.8), { yaw: PI });
+  A.slide0 = boy.end;
+  face(A.slide0, FACE.determined);
+  const slidePose = (u, t) => POSE.chainSlide(t, 0.35 * Math.sin(t * 2.3));
+  boy.move(grab(-33.0), 5.4, slidePose, { yaw: PI, ease: (u) => Math.pow(u, 1.6) });
+  ev(A.slide0, 'slide', { dur: 5.4 });
+  A.brake = boy.end;
+  boy.move(grab(-43.0), 1.6, (u, t) => POSE.blend([[POSE.chainSlide(t, 0), 1], [POSE.hang(t, 0), u]]), { yaw: PI, ease: (u) => 1 - (1 - u) * (1 - u) });
+  ev(A.brake, 'brake', { dur: 1.6 });
+  face(A.brake, FACE.effort);
+  A.cartWait = boy.end;
+  // a mine cart thunders through the gallery right beside him; he pulls his legs up
+  const tuck = (u, t) => { const p = POSE.hang(t, 0.2); const k = pulse(u, 0.5, 0.45); p.rot.L_thigh = [-1.3 * k - 0.3, 0, 0.1]; p.rot.R_thigh = [-1.2 * k - 0.1, 0, -0.1]; p.rot.L_shin = [1.6 * k + 0.4, 0, 0]; p.rot.R_shin = [1.5 * k + 0.3, 0, 0]; return p; };
+  boy.pose(2.6, tuck, { yaw: PI });
+  A.cartPass = A.cartWait + 1.25;
+  ev(A.cartPass - 0.9, 'cart', { dur: 2.2 });
+  face(A.cartWait + 0.5, FACE.surprised); face(A.cartWait + 2.2, FACE.joy);
+  A.slide1 = boy.end;
+  boy.move(grab(-79.0), 4.0, slidePose, { yaw: PI, ease: (u) => Math.pow(u, 1.5) });
+  ev(A.slide1, 'slide', { dur: 4.2 });
+  face(A.slide1, FACE.determined);
+  A.breakthrough = boy.end;
+  boy.move(grab(-116.9), 6.0, (u, t) => POSE.chainSlide(t, 0.2 * Math.sin(t * 2)), { yaw: PI, ease: (u) => 1 - (1 - u) * (1 - u) });
+  ev(A.breakthrough, 'slide', { dur: 6.0, open: true });
+  face(A.breakthrough + 0.4, FACE.surprised); face(A.breakthrough + 3.5, FACE.joy);
+  A.chainEnd = boy.end;
+  boy.pose(1.0, (u, t) => POSE.addRot(POSE.hang(t, 0.3), 'head', 0.6, 0, 0), { yaw: PI });
+  A.drop = boy.end;
+  boy.jump(v(CH.x, HALL.platformY, CH.z + 0.1), { dur: 0.55, h: 0.08 });
+  A.catLand = boy.end;
+  ev(A.catLand, 'land', { big: true, metal: true });
+  boy.pose(0.6, (u) => POSE.land(u), { yaw: PI });
+
+  // ================================================================ 8 Die Maschinenhalle
+  const D = HALL.catDir, SIDE = v(D.z, 0, -D.x);
+  const cw = (d, lat = 0) => HALL.catA.clone().addScaledVector(D, d).addScaledVector(SIDE, lat);
+  const catYaw = Math.atan2(D.x, D.z);
+  A.hallLook = boy.end;
+  boy.pose(11.5, (u, t) => POSE.blend([[POSE.awe(t, smoothstep(0, 0.15, u)), 1], [POSE.addRot(POSE.idle(t), 'head', -0.2, 0.9 * Math.sin(u * PI * 2), 0), 0.35]]), { yaw: PI });
+  face(A.hallLook + 0.3, FACE.surprised); face(A.hallLook + 5.5, FACE.joy); face(A.hallLook + 10.0, FACE.determined);
+  A.catRun = boy.end;
+  boy.path([cw(0), cw(1.5), cw(17.5)], { gait: 'run', speed: 3.6 });
+  A.valve = boy.end - 0.15;
+  ev(A.valve, 'valve', { dur: 2.4 });
+  boy.pose(2.2, (u, t) => POSE.shield(t, smoothstep(0, 0.2, u) * (1 - smoothstep(0.75, 1, u))), { yaw: catYaw });
+  face(A.valve + 0.1, FACE.surprised); face(A.valve + 1.5, FACE.effort);
+  A.dash = boy.end;
+  boy.path([cw(17.5), cw(22), cw(26.5)], { gait: 'run', speed: 4.6, mod: (p, t, st) => POSE.duck(p, 0.6) });
+  boy.path([cw(26.5), cw(30.2)], { gait: 'walk', speed: 1.3 });
+  A.meet = boy.end;
+  // the automaton: freeze, the core pulses, the eye turns golden, it bows and steps aside
+  boy.pose(6.4, (u, t) => POSE.blend([[POSE.idle(t, { breathe: 2.2 }), 1], [POSE.lookSatchel(t, 1), pulse(u, 0.42, 0.18)]]), { yaw: catYaw });
+  face(A.meet, FACE.surprised); face(A.meet + 3.0, FACE.neutral); face(A.meet + 4.2, FACE.joy);
+  A.autoPulse = A.meet + 2.6; ev(A.autoPulse, 'corePulse');
+  A.autoGold = A.meet + 3.2; ev(A.autoGold, 'autoGold');
+  A.autoBow = A.meet + 3.8;
+  A.autoAside = A.meet + 5.0;
+  ev(A.meet - 0.4, 'beep');
+  A.pass = boy.end;
+  boy.path([cw(30.2), cw(33.5), cw(37.6)], { gait: 'walk', speed: 1.5 });
+  // a gap in the catwalk: planks gone, he jumps across
+  A.gapRun = boy.end;
+  boy.path([cw(37.6), cw(38.6)], { gait: 'run', speed: 3.4 });
+  A.gapJump = boy.end;
+  boy.jump(cw(42.0), { dur: 0.72, h: 0.55, tuck: 1.1 });
+  ev(A.gapJump, 'jump'); ev(boy.end, 'land', { metal: true });
+  face(A.gapJump, FACE.effort);
+  A.gapLand = boy.end;
+  boy.pose(0.45, (u) => POSE.land(u), { yaw: catYaw });
+  boy.path([cw(42.0), cw(45.5), cw(47.8)], { gait: 'jog', speed: 2.2 });
+  face(A.gapLand + 0.4, FACE.joy);
+  A.edge = boy.end;
+  boy.pose(4.8, (u, t) => POSE.awe(t, smoothstep(0, 0.25, u)), { yaw: catYaw });
+  face(A.edge + 0.3, FACE.surprised); face(A.edge + 3.5, FACE.determined);
+
+  // ================================================================ 9 Das Herz
+  A.heart0 = boy.end;
+  const standYaw = Math.atan2(HALL.heart.x - HALL.stand.x, HALL.heart.z - HALL.stand.z);
+  boy.path([cw(47.8), HALL.stand.clone().addScaledVector(HALL.sockDir, 0.6), HALL.stand], { gait: 'walk', speed: 1.1 });
+  A.atSocket = boy.end;
+  ev(A.atSocket - 1.5, 'heartbeat', { dur: 14, weak: true });
+  boy.pose(6.0, (u, t) => POSE.blend([[POSE.idle(t), 1], [POSE.addRot(POSE.idle(t), 'head', 0.5, 0.9, 0), smoothstep(0.2, 0.35, u) * (1 - smoothstep(0.6, 0.75, u))], [POSE.awe(t, 1), smoothstep(0.75, 0.9, u)]]), { yaw: standYaw });
+  face(A.atSocket + 0.3, FACE.neutral); face(A.atSocket + 2.4, FACE.surprised); face(A.atSocket + 4.6, FACE.determined);
+  A.take = boy.end;
+  boy.pose(2.0, (u, t) => POSE.lookSatchel(t, 1), { yaw: standYaw });
+  A.coreOut = A.take + 1.1;
+  ev(A.coreOut, 'coreOut');
+  A.hold = boy.end;
+  boy.pose(5.4, (u, t) => POSE.holdCore(t, 1, smoothstep(0.35, 0.8, u) * 0.6), { yaw: standYaw });
+  face(A.hold + 0.4, FACE.joy); face(A.hold + 3.2, FACE.determined);
+  A.insert = boy.end;
+  boy.pose(2.3, (u, t) => POSE.insertCore(t, smoothstep(0, 1, u)), { yaw: standYaw });
+  face(A.insert, FACE.effort);
+  A.click = boy.end;
+  ev(A.click, 'click');
+  boy.pose(2.2, (u, t) => POSE.insertCore(t, 1), { yaw: standYaw });
+  face(A.click + 0.2, FACE.neutral);
+  A.wake = boy.end;
+  ev(A.wake, 'wake');
+  face(A.wake + 0.1, FACE.surprised);
+  boy.move(HALL.stand.clone().addScaledVector(HALL.sockDir, 1.0), 1.4, (u, t) => POSE.blend([[POSE.insertCore(t, 1 - u), 1 - u], [POSE.awe(t, 1), u]]), { yaw: standYaw, ease: (u) => u * u * (3 - 2 * u) });
+  A.waveS = A.wake + 2.2;
+  ev(A.waveS, 'wave');
+  boy.pose(4.6, (u, t) => POSE.awe(t, 1));
+  A.cheer = boy.end;
+  boy.pose(3.2, (u, t) => POSE.cheer(t, smoothstep(0, 0.2, u) * (1 - smoothstep(0.8, 1, u))));
+  ev(A.cheer + 0.2, 'cheer');
+  face(A.cheer, FACE.joy);
+  A.afterglow = boy.end;
+  A.upShaft = A.afterglow + 3.5;          // the light races up the shaft
+  A.city = A.upShaft + 3.0;               // epilogue in the city
+  boy.pose(A.city - boy.end, (u, t) => POSE.awe(t, 0.8));
+  ev(A.upShaft, 'rush');
+  ev(A.city, 'cityGlow');
+  // later that evening: Emil sits on the parapet of the roof, the cat next to him
+  A.seat = v(8.62, ROOF.h6 + 0.06, -109.6);
+  boy.pose(200, (u, t) => POSE.sit(t, 0.25 * Math.sin(t * 0.3) - 0.1), { pos: A.seat, yaw: -PI / 2 });
+  A.roofShot = A.city + 31;
+  face(A.city, FACE.neutral); face(A.roofShot + 2.5, FACE.joy); face(A.roofShot + 9.5, FACE.neutral); face(A.roofShot + 11, FACE.joy);
+  A.epilogueEnd = A.city + 59;
 
   // ================================================================ constable Brummer
   const copSpot = v(4.35, 0, 112.4);
@@ -222,8 +350,14 @@ export function buildStory() {
   ev(cop.end - 2.2, 'whistle', { who: 'cop', dur: 2.0 });
   cop.pose(4.0, (u, t) => POSE.shakeFist(t, 1), { yaw: Math.PI / 2 });
   cface(A.copAtLadder, FACE.stern); cface(A.copAtLadder + 3.3, FACE.whistle); cface(A.copAtLadder + 5.8, FACE.shout);
-  cop.pose(400, (u, t) => POSE.addRot(POSE.idle(t, { breathe: 1.6 }), 'head', -0.25, 0, 0), { yaw: Math.PI / 2 });
+  cop.pose(A.city + 5.0 - cop.end, (u, t) => POSE.addRot(POSE.idle(t, { breathe: 1.6 }), 'head', -0.25, 0, 0), { yaw: Math.PI / 2 });
   cface(A.copAtLadder + 9.8, FACE.puff);
+  // the lamps flare up: he looks up, takes a breath and smiles
+  A.copSmile = cop.end;
+  cop.pose(3.0, (u, t) => POSE.addRot(POSE.awe(t, smoothstep(0, 0.3, u)), 'head', -0.1, 0, 0), { yaw: -2.5 });
+  cop.pose(4.0, (u, t) => POSE.copRelief(t, u), { yaw: -2.5 });
+  cop.pose(200, (u, t) => POSE.addRot(POSE.idle(t, { breathe: 1.2 }), 'head', -0.3, 0, 0), { yaw: -2.5 });
+  cface(A.copSmile, FACE.stern); cface(A.copSmile + 1.2, FACE.smile);
 
   // ================================================================ tram on the Kesselstrasse
   // Emil crosses the rails; the tram front passes his line 0.8 s later and cuts off Brummer
@@ -237,9 +371,39 @@ export function buildStory() {
   const slowMo = [
     { s: A.cartJump + 0.05, sDur: 0.8, speed: 0.3 },
     { s: A.alleyJump + 0.02, sDur: 0.93, speed: 0.085 },
+    { s: A.cartPass - 0.45, sDur: 0.9, speed: 0.25 },
+    { s: A.gapJump + 0.05, sDur: 0.6, speed: 0.22 },
+    { s: A.wake - 0.1, sDur: 1.1, speed: 0.3 },
   ];
   A.slowMo = slowMo;
-  return { A, boy, cop, events, faces, copFaces, tram, slowMo };
+  // ================================================================ the automaton on the catwalk
+  const autoStart = cw(44.0), autoStop = cw(32.3), autoAside = cw(33.2, -0.52);
+  const autoWalk0 = A.meet - 6.0, autoWalk1 = A.meet - 0.6;
+  const auto = {
+    at(S) {
+      const out = { pos: autoStart.clone(), yaw: catYaw + PI, walk: 0, head: 0, pitch: 0, gold: S > A.autoGold, phase: S * 7 };
+      if (S < autoWalk0) return out;
+      if (S < autoWalk1) { const u = (S - autoWalk0) / (autoWalk1 - autoWalk0); out.pos.lerpVectors(autoStart, autoStop, u); out.walk = 1; return out; }
+      out.pos.copy(autoStop);
+      if (S < A.autoGold) { out.head = 0.6 * Math.sin((S - autoWalk1) * 2.2) * smoothstep(autoWalk1, autoWalk1 + 0.5, S); return out; }
+      if (S < A.autoAside) { out.pitch = 0.45 * pulse(S, A.autoBow + 0.4, 0.8); return out; }
+      // steps aside, turns towards the heart and waits, then follows Emil
+      const u = smoothstep(A.autoAside, A.autoAside + 1.2, S);
+      out.pos.lerpVectors(autoStop, autoAside, u); out.walk = u < 1 ? 1 : 0;
+      out.yaw = catYaw + PI - u * 1.4; out.head = -0.8 * u;
+      if (S > A.pass + 2.5) {
+        const f = Math.min(1, (S - A.pass - 2.5) / 9);
+        out.pos.lerpVectors(autoAside, cw(38.2, -0.3), f); out.walk = f < 1 ? 1 : 0; out.yaw = catYaw; out.head = 0;
+      }
+      return out;
+    },
+  };
+  // the mine cart in the gallery (x along the gallery, rails at MINE_RAIL_Z)
+  const cartSpeed = 11;
+  const tunnelCart = { at: (S) => ({ pos: v(CITY.hatch.x + (S - A.cartPass) * cartSpeed, -42 - 2.3 * 0.72 + 0.1, MINE_RAIL_Z), yaw: PI / 2, visible: Math.abs(S - A.cartPass) < 3 }) };
+
+  A.filmOffset = 12; // the flight over the city is 12 s longer than the story prelude
+  return { A, boy, cop, events, faces, copFaces, tram, slowMo, auto, tunnelCart };
 }
 
 // story time when a track crosses a given z between s0 and s1 (bisection on the path)

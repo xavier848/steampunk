@@ -273,3 +273,63 @@ export function hang(t, swing = 0) {
   p.rot.L_shin = [0.5, 0, 0]; p.rot.R_shin = [0.4, 0, 0];
   return p;
 }
+
+// holding the brass core in front of the chest with both hands, looking at it
+export function holdCore(t, amt = 1, lift = 0) {
+  const p = idle(t);
+  const k = amt;
+  p.rot.L_arm = [-0.75 * k - 0.5 * lift, 0, 0.09 - 0.3 * k]; p.rot.R_arm = [-0.75 * k - 0.5 * lift, 0, -0.09 + 0.3 * k];
+  p.rot.L_fore = [-0.18 - 1.15 * k + 0.3 * lift, 0.35 * k, 0]; p.rot.R_fore = [-0.18 - 1.15 * k + 0.3 * lift, -0.35 * k, 0];
+  addRot(p, 'head', 0.4 * k - 0.35 * lift, 0, 0); addRot(p, 'neck', 0.1 * k, 0, 0);
+  return p;
+}
+// pushing the core into the socket in front of him at chest height (u 0 hold .. 1 arms out)
+export function insertCore(t, u) {
+  const p = holdCore(t, 1 - u);
+  const k = u;
+  p.rot.L_arm = [-0.75 - 0.75 * k, 0, 0.09 - 0.3 + 0.1 * k]; p.rot.R_arm = [-0.75 - 0.75 * k, 0, -0.09 + 0.3 - 0.1 * k];
+  p.rot.L_fore = [-1.33 + 1.1 * k, 0.35 * (1 - k), 0]; p.rot.R_fore = [-1.33 + 1.1 * k, -0.35 * (1 - k), 0];
+  addRot(p, 'spine', 0.18 * k, 0, 0); addRot(p, 'head', -0.3 * k, 0, 0);
+  p.rot.L_thigh = [-0.25 * k, 0, 0.05]; p.rot.R_thigh = [0.2 * k, 0, -0.05];
+  p.rot.L_shin = [0.35 * k, 0, 0];
+  return p;
+}
+// looking up in awe, arms a little away from the body
+export function awe(t, amt = 1) {
+  const p = idle(t, { breathe: 1.5 });
+  addRot(p, 'head', -0.42 * amt, 0.12 * Math.sin(t * 0.4) * amt, 0); addRot(p, 'spine', -0.08 * amt, 0, 0);
+  p.rot.L_arm = [0.1, 0, 0.09 + 0.3 * amt]; p.rot.R_arm = [0.1, 0, -0.09 - 0.3 * amt];
+  p.rot.L_fore = [-0.35 * amt, 0, 0]; p.rot.R_fore = [-0.35 * amt, 0, 0];
+  return p;
+}
+// joy: right fist up, little hop
+export function cheer(t, amt = 1) {
+  const p = idle(t, { breathe: 2 });
+  const b = Math.abs(Math.sin(t * 5.5)) * amt;
+  p.rot.R_arm = [-2.6 * amt, 0, -0.25 * amt]; p.rot.R_fore = [-0.5 * amt - 0.3 * b, 0, 0];
+  p.rot.L_arm = [-0.5 * amt, 0, 0.35 * amt]; p.rot.L_fore = [-1.1 * amt, 0, 0];
+  addRot(p, 'head', -0.25 * amt, 0, 0);
+  p.hipsOff = [0, 0.05 * b, 0];
+  return p;
+}
+// the constable takes off his helmet and wipes his brow (u 0..1) then smiles
+export function copRelief(t, u) {
+  const p = idle(t, { breathe: 1.4 });
+  const k = Math.sin(Math.min(1, u) * Math.PI);
+  p.rot.R_arm = [-2.2 * k, 0, -0.3 * k]; p.rot.R_fore = [-1.6 * k, 0, 0];
+  addRot(p, 'head', -0.3, 0, 0);
+  return p;
+}
+// sitting on a ledge, legs dangling over the edge, hands on the ledge beside the hips
+export function sit(t, look = 0) {
+  const p = idle(t, { breathe: 1.2 });
+  p.rot.L_thigh = [-1.45, 0, 0.12]; p.rot.R_thigh = [-1.5, 0, -0.1];
+  p.rot.L_shin = [1.35 + 0.12 * Math.sin(t * 1.3), 0, 0]; p.rot.R_shin = [1.45 + 0.12 * Math.sin(t * 1.3 + 2.2), 0, 0];
+  p.rot.L_foot = [0.3, 0, 0]; p.rot.R_foot = [0.25, 0, 0];
+  p.rot.spine = [0.12, 0, 0]; p.rot.chest = [0.05, 0, 0];
+  p.rot.L_arm = [0.35, 0, 0.35]; p.rot.R_arm = [0.35, 0, -0.35];
+  p.rot.L_fore = [-0.25, 0, 0]; p.rot.R_fore = [-0.25, 0, 0];
+  addRot(p, 'head', -0.12, look, 0);
+  p.hipsOff = [0, 0, -0.04];
+  return p;
+}

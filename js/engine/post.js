@@ -309,7 +309,8 @@ void main() {
   float vig = smoothstep(0.35, 0.95, length(q * vec2(1.25, 1.0)));
   col = mix(col, col * uVignetteColor, vig * uVignette);
 
-  // ---------------------------------------------------------------- titles
+  col = mix(uFadeColor, col, uFade);
+  // ---------------------------------------------------------------- titles (over the fade)
   if (uTitleOpacity > 0.0) {
     vec2 tuv = (vUv - uTitleRect.xy) / uTitleRect.zw;
     if (tuv.x >= 0.0 && tuv.x <= 1.0 && tuv.y >= 0.0 && tuv.y <= 1.0) {
@@ -317,7 +318,6 @@ void main() {
       col = mix(col, t.rgb, t.a * uTitleOpacity);
     }
   }
-  col = mix(uFadeColor, col, uFade);
   oFrag = vec4(clamp(col, 0.0, 1.0), 1.0);
 }`;
 
