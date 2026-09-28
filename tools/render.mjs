@@ -71,6 +71,7 @@ async function main() {
   if (err) { console.log('ERROR', err); await browser.close(); srv.close(); process.exit(1); }
   console.log(`ready in ${((Date.now() - t0) / 1000).toFixed(1)}s`, JSON.stringify(await page.evaluate(() => window.dampf.stats())));
   fs.mkdirSync(out, { recursive: true });
+  if (args.pre) console.log('pre:', JSON.stringify(await page.evaluate(String(args.pre))));
 
   if (args.times) {
     const times = String(args.times).split(',').map(Number);

@@ -86,8 +86,8 @@ const rgb = (r, g, b) => `rgb(${Math.max(0, Math.min(255, r)) | 0},${Math.max(0,
 // ---------------------------------------------------------------- layers
 function plaster(p) {
   p.fill(128);
-  p.scumble(260, [80, 200], [26, 60], 0.15, 0.5, 128, 16, [0.07, 0.14], true, 36);
-  p.scumble(420, [30, 90], [8, 22], 0.0, 0.8, 128, 20, [0.08, 0.16], true, 30);
+  p.scumble(260, [80, 200], [26, 60], 0.15, 0.5, 128, 26, [0.09, 0.17], true, 44);
+  p.scumble(420, [30, 90], [8, 22], 0.0, 0.8, 128, 30, [0.1, 0.18], true, 36);
   // occasional flaking patches revealing darker base
   for (let i = 0; i < 10; i++) {
     const x = p.r.next() * SIZE, y = p.r.next() * SIZE;

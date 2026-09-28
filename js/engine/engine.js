@@ -123,6 +123,7 @@ export class Engine {
   }
   _renderShadow(scene, rig) {
     const r = this.renderer;
+    if (this.post.prof) this.post._mark('pre');
     const keep = [U.uShadowS.value, U.uShadowD.value, U.uShadowSOn.value, U.uShadowDOn.value];
     U.uShadowS.value = U.uShadowD.value = this.shadowDummy.depth;
     U.uShadowSOn.value = U.uShadowDOn.value = 0;
@@ -134,9 +135,16 @@ export class Engine {
     U.uPass.value = 0;
     [U.uShadowS.value, U.uShadowD.value, U.uShadowSOn.value, U.uShadowDOn.value] = keep;
     r.setRenderTarget(null);
+    if (this.post.prof) this.post._mark(rig === this.shadowS ? 'shadowStatic' : 'shadowDyn');
   }
   renderFrame(scene, camera) {
     U.uCamPos.value.copy(camera.position);
+    if (!this.keyOverride) {
+      // character key light from the upper side of the camera
+      camera.updateMatrixWorld();
+      const e = camera.matrixWorld.elements;
+      U.uCharKeyDir.value.set(e[0] * 0.55 + e[4] * 0.5 + e[8] * 0.7, e[1] * 0.55 + e[5] * 0.5 + e[9] * 0.7, e[2] * 0.55 + e[6] * 0.5 + e[10] * 0.7).normalize();
+    }
     this.post.renderScene(scene, camera);
     this.post.finish(null);
   }

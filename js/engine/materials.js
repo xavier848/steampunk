@@ -50,6 +50,8 @@ export const U = {
   uPLN: { value: 0 },
   uBrush: { value: null },
   uEmissiveBoost: { value: 1 },
+  uCharKeyDir: { value: v3(0.3, 0.5, 0.8).normalize() },
+  uCharKeyColor: { value: c(0x6a5448) },
   uWindowGlow: { value: 1 },
 };
 
@@ -77,6 +79,13 @@ uniform sampler2DShadow uShadowD; uniform mat4 uShadowMatD; uniform float uShado
 uniform vec4 uPL[8]; uniform vec4 uPLC[8]; uniform int uPLN;
 uniform sampler2DArray uBrush;
 uniform float uEmissiveBoost;
+uniform vec3 uCharKeyDir; uniform vec3 uCharKeyColor;
+
+// soft two band key light that only characters receive (keeps faces readable)
+vec3 charKey(vec3 albedo, vec3 N, float bias) {
+  float nk = dot(N, uCharKeyDir) + bias * 0.5;
+  return albedo * uCharKeyColor * (0.55 * smoothstep(-0.05, 0.08, nk) + 0.45 * smoothstep(0.42, 0.55, nk));
+}
 
 float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 

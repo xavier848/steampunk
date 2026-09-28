@@ -60,6 +60,25 @@ window.dampf = {
   play() { state.playing = true; state.last = performance.now(); },
   pause() { state.playing = false; },
   seek(t) { state.T = t; renderAt(t); },
+  profile(t, n = 3) {
+    const post = engine.post;
+    renderAt(t);
+    post.prof = {};
+    for (let i = 0; i < n; i++) { post._t = performance.now(); renderAt(t); post._mark('rest'); }
+    const out = {};
+    for (const k in post.prof) out[k] = +(post.prof[k] / n).toFixed(1);
+    post.prof = null;
+    return out;
+  },
+  setQuality({ kuwaScale, kuwaRadius, samples, kuwaQ } = {}) {
+    const post = engine.post;
+    if (kuwaScale !== undefined) post.params.kuwaScale = kuwaScale;
+    if (kuwaRadius !== undefined) post.params.kuwaRadius = kuwaRadius;
+    if (kuwaQ !== undefined) post.params.kuwaQ = kuwaQ;
+    if (samples !== undefined) { post.rtMain.samples = samples; post.rtMain.dispose(); }
+    post.setSize(post.w, post.h, true);
+    return post.params;
+  },
   stats() {
     const i = engine.renderer.info;
     return { calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, pixelRatio: engine.pixelRatio, size: [engine.width, engine.height] };

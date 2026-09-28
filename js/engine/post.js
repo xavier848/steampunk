@@ -312,6 +312,7 @@ export class Post {
     this.rtT1 = new THREE.WebGLRenderTarget(2, 2, HF);
     this.rtT2 = new THREE.WebGLRenderTarget(2, 2, HF);
     this.rtKuwa = new THREE.WebGLRenderTarget(2, 2, HF);
+    this.rtToneS = new THREE.WebGLRenderTarget(2, 2, HF);
     this.bloomRT = [];
     for (let i = 0; i < 6; i++) this.bloomRT.push(new THREE.WebGLRenderTarget(2, 2, HF));
     this.bloomUp = [];
@@ -344,26 +345,45 @@ export class Post {
       uTitleRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uTitleOpacity: { value: 0 },
     });
     this.params = {
-      exposure: 1.0, kuwaRadius: 4, kuwaQ: 8, kuwaOn: true, bloom: 0.9, bloomThreshold: 1.1,
-      rays: 0.8, sunScreen: null, far: 5000,
+      exposure: 1.0, kuwaRadius: 3, kuwaQ: 8, kuwaOn: true, bloom: 0.9, bloomThreshold: 1.1,
+      rays: 0.8, sunScreen: null, far: 5000, kuwaScale: 0.5,
     };
   }
-  setSize(w, h) {
-    if (w === this.w && h === this.h) return;
+  setSize(w, h, force = false) {
+    if (w === this.w && h === this.h && !force) return;
     this.w = w; this.h = h;
     this.rtMain.setSize(w, h);
     this.rtTone.setSize(w, h);
-    this.rtT1.setSize(w, h); this.rtT2.setSize(w, h);
-    this.rtKuwa.setSize(w, h);
+    const ks = this.params.kuwaScale;
+    const kw = Math.max(2, Math.round(w * ks)), kh = Math.max(2, Math.round(h * ks));
+    this.kw = kw; this.kh = kh;
+    this.rtToneS.setSize(kw, kh);
+    this.rtT1.setSize(kw, kh); this.rtT2.setSize(kw, kh);
+    this.rtKuwa.setSize(kw, kh);
     let bw = w >> 1, bh = h >> 1;
     for (let i = 0; i < 6; i++) { this.bloomRT[i].setSize(Math.max(1, bw), Math.max(1, bh)); this.bloomUp[i].setSize(Math.max(1, bw), Math.max(1, bh)); bw >>= 1; bh >>= 1; }
     this.rtRayMask.setSize(Math.max(1, w >> 2), Math.max(1, h >> 2));
     this.rtRays.setSize(Math.max(1, w >> 2), Math.max(1, h >> 2));
   }
-  _run(mat, target) {
+  _run(mat, target, label) {
     this.quad.material = mat;
     this.r.setRenderTarget(target);
     this.r.render(this.fsScene, this.fsCam);
+    if (this.prof) this._mark(label || 'pass');
+  }
+  _mark(label) {
+    const gl = this.r.getContext();
+    // readPixels forces the GPU process to finish all queued work (finish() does not)
+    const px = this._px || (this._px = new Uint8Array(16));
+    const rt = this.r.getRenderTarget();
+    if (rt && rt.texture && rt.texture.type === THREE.HalfFloatType) {
+      const f = this._pxf || (this._pxf = new Uint16Array(4));
+      this.r.readRenderTargetPixels(rt, 0, 0, 1, 1, f);
+    } else if (rt) { /* depth-only or byte targets */ try { this.r.readRenderTargetPixels(rt, 0, 0, 1, 1, px); } catch (e) {} }
+    else gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const now = performance.now();
+    this.prof[label] = (this.prof[label] || 0) + (now - this._t);
+    this._t = now;
   }
   renderScene(scene, camera) {
     const r = this.r;
@@ -371,6 +391,7 @@ export class Post {
     r.setClearColor(0x000000, 0);
     r.clear(true, true, true);
     r.render(scene, camera);
+    if (this.prof) this._mark('scene');
   }
   // full post chain; target null = canvas
   finish(target = null) {
@@ -380,20 +401,29 @@ export class Post {
     // tone
     this.mTone.uniforms.tSrc.value = hdr;
     this.mTone.uniforms.uExposure.value = p.exposure;
-    this._run(this.mTone, this.rtTone);
+    this._run(this.mTone, this.rtTone, 'tone');
     let paint = this.rtTone.texture;
     if (p.kuwaOn) {
-      this.mTensor.uniforms.tSrc.value = this.rtTone.texture;
-      this.mTensor.uniforms.uTexel.value.set(1 / W, 1 / H);
-      this._run(this.mTensor, this.rtT1);
-      this.mBlur.uniforms.tSrc.value = this.rtT1.texture; this.mBlur.uniforms.uDir.value.set(1 / W, 0);
+      const KW = this.kw, KH = this.kh;
+      let src = this.rtTone.texture;
+      if (KW !== W) {
+        // downsample the toned image for the painterly pass
+        this.mDown.uniforms.tSrc.value = this.rtTone.texture;
+        this.mDown.uniforms.uTexel.value.set(0.5 / W, 0.5 / H);
+        this._run(this.mDown, this.rtToneS, 'downsample');
+        src = this.rtToneS.texture;
+      }
+      this.mTensor.uniforms.tSrc.value = src;
+      this.mTensor.uniforms.uTexel.value.set(1 / KW, 1 / KH);
+      this._run(this.mTensor, this.rtT1, 'tensor');
+      this.mBlur.uniforms.tSrc.value = this.rtT1.texture; this.mBlur.uniforms.uDir.value.set(1 / KW, 0);
       this._run(this.mBlur, this.rtT2);
-      this.mBlur.uniforms.tSrc.value = this.rtT2.texture; this.mBlur.uniforms.uDir.value.set(0, 1 / H);
+      this.mBlur.uniforms.tSrc.value = this.rtT2.texture; this.mBlur.uniforms.uDir.value.set(0, 1 / KH);
       this._run(this.mBlur, this.rtT1);
       const k = this.mKuwa.uniforms;
-      k.tSrc.value = this.rtTone.texture; k.tTensor.value = this.rtT1.texture; k.uTexel.value.set(1 / W, 1 / H);
+      k.tSrc.value = src; k.tTensor.value = this.rtT1.texture; k.uTexel.value.set(1 / KW, 1 / KH);
       k.uRadius.value = p.kuwaRadius; k.uQ.value = p.kuwaQ;
-      this._run(this.mKuwa, this.rtKuwa);
+      this._run(this.mKuwa, this.rtKuwa, 'kuwahara');
       paint = this.rtKuwa.texture;
     }
     // bloom
@@ -401,7 +431,7 @@ export class Post {
     this.mBright.uniforms.tSrc.value = hdr;
     this.mBright.uniforms.uThreshold.value = p.bloomThreshold;
     this.mBright.uniforms.uTexel.value.set(1 / W, 1 / H);
-    this._run(this.mBright, this.bloomRT[0]);
+    this._run(this.mBright, this.bloomRT[0], 'bloom');
     for (let i = 1; i < 6; i++) {
       this.mDown.uniforms.tSrc.value = this.bloomRT[i - 1].texture;
       this.mDown.uniforms.uTexel.value.set(1 / this.bloomRT[i - 1].width, 1 / this.bloomRT[i - 1].height);
@@ -436,6 +466,6 @@ export class Post {
     c.tRays.value = raysOn ? this.rtRays.texture : this.blackTex;
     c.uTexel.value.set(1 / W, 1 / H); c.uRes.value.set(W, H);
     c.uBloom.value = p.bloom; c.uRays.value = raysOn ? p.rays : 0;
-    this._run(this.mComp, target);
+    this._run(this.mComp, target, 'composite');
   }
 }

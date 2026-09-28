@@ -14,6 +14,12 @@ import { stall, barrel, crate, handcart, kiosk, foodStall, sack } from '../city/
 import { RNG } from '../core/rng.js';
 import { LAYER_MAIN, LAYER_STATIC_CASTER, LAYER_DYN_CASTER } from '../engine/engine.js';
 import { applyLook, LOOKS } from '../engine/looks.js';
+import { buildBoy, buildCop, applyPose } from '../actors/hero.js';
+import { Crowd, GAIT } from '../actors/crowd.js';
+import * as POSE from '../actors/poses.js';
+import { Scarf } from '../actors/scarf.js';
+import { FACE } from '../actors/faces.js';
+import { makePerson } from '../actors/people.js';
 
 export function buildStyleTest(engine) {
   const scene = new THREE.Scene();
@@ -126,19 +132,57 @@ export function buildStyleTest(engine) {
   const sky = createSky({ center: [0, -60] });
   scene.add(sky);
 
+  // ---- characters
+  const boy = buildBoy();
+  scene.add(boy.group);
+  const cop = buildCop();
+  scene.add(cop.group);
+  const scarf = new Scarf();
+  scene.add(scarf.mesh);
+  const crowd = new Crowd();
+  scene.add(crowd.group);
+  const people = [];
+  const pr = new RNG(77);
+  for (let i = 0; i < 44; i++) {
+    const side = pr.sign();
+    const standing = pr.chance(0.35);
+    const person = crowd.add(makePerson(pr));
+    if (!person) continue;
+    person.x = side * pr.range(5.3, 7.4); person.z = pr.range(-70, 36);
+    person.dir = pr.sign(); person.speed = pr.range(1.0, 1.5);
+    person.gait = standing ? pr.pick([GAIT.stand, GAIT.talk, GAIT.haggle]) : GAIT.walk;
+    person.yaw = standing ? pr.range(0, Math.PI * 2) : (person.dir > 0 ? 0 : Math.PI);
+    person.phase0 = pr.next();
+    people.push(person);
+  }
+  // one townsman close to the camera for the crowd close-up
+  const star = crowd.add(makePerson(new RNG(5), 'gent'));
+  star.x = 5.2; star.z = 15.2; star.dir = 0; star.speed = 0; star.gait = GAIT.talk; star.yaw = -2.2; star.phase0 = 0.3; people.push(star);
+  const star2 = crowd.add(makePerson(new RNG(8), 'lady'));
+  star2.x = 5.9; star2.z = 16.3; star2.dir = 0; star2.speed = 0; star2.gait = GAIT.stand; star2.yaw = 2.6; star2.phase0 = 0.7; people.push(star2);
+  // a few people on the road crossing
+  for (let i = 0; i < 8; i++) {
+    const person = crowd.add(makePerson(pr));
+    person.x = pr.range(-3.5, 3.5); person.z = pr.range(-30, 25); person.dir = pr.sign(); person.speed = pr.range(1.0, 1.4);
+    person.gait = GAIT.walk; person.yaw = person.dir > 0 ? 0 : Math.PI; person.phase0 = pr.next();
+    people.push(person);
+  }
+
   const camera = new THREE.PerspectiveCamera(42, 16 / 9, 0.15, 12000);
   const info = { tris: geo.index.count / 3, lots: lots.length, gears: X.gears.length, lamps: lampAnchors.length, chimneys: X.chimneys.length };
   console.log('styletest', info);
 
   const shots = [
-    { pos: [2.2, 1.7, 30], look: [-1.5, 6.5, -40], fov: 45 },
-    { pos: [-3, 1.5, 20], look: [4, 5.5, -10], fov: 50 },
-    { pos: [5.5, 9, 4], look: [-8, 4, -30], fov: 50 },
-    { pos: [0, 30, 45], look: [0, 6, -40], fov: 50 },
+    { pos: [2.6, 1.25, 25.2], look: [0.4, 1.35, 21.0], fov: 40, boy: 'stand' },
+    { pos: [0.9, 1.1, 14.5], look: [0.3, 1.2, 20], fov: 45, boy: 'run' },
+    { pos: [-2.8, 1.6, 27], look: [1.0, 1.6, 17], fov: 38, boy: 'stand' },
+    { pos: [4.2, 7.5, 34], look: [-1.0, 2.0, 10], fov: 48, boy: 'run' },
+    { pos: [0.95, 1.45, 22.25], look: [0.38, 1.36, 21.0], fov: 32, boy: 'stand' },
+    { pos: [4.2, 1.6, 12.0], look: [6.4, 1.3, 16.0], fov: 45, boy: 'stand' },
   ];
 
   return {
-    scene, camera, duration: 40, info,
+    scene, camera, duration: 60, info,
     update(T) {
       const S = T;
       U.uTime.value = S;
@@ -150,6 +194,30 @@ export function buildStyleTest(engine) {
       sky.userData.dome.position.copy(camera.position);
       gears.update(S);
       lamps.update(() => 1, camera.position, 8);
+      // boy
+      const bz = shot.boy === 'run' ? 22 - ((S % 10) * 4.5) : 21;
+      const bpos = new THREE.Vector3(0.4, 0.0, bz);
+      const pose = shot.boy === 'run' ? POSE.locomotion(S * 1.45, 1) : POSE.idle(S, { look: 0.25 });
+      applyPose(boy, { ...pose, pos: bpos, yaw: shot.boy === 'run' ? Math.PI : 0.5 });
+      boy.setFace(shot.boy === 'run' ? FACE.determined : FACE.neutral);
+      const yawB = shot.boy === 'run' ? Math.PI : 0.5;
+      const fwd = new THREE.Vector3(Math.sin(yawB), 0, Math.cos(yawB));
+      const right = new THREE.Vector3(Math.cos(yawB), 0, -Math.sin(yawB));
+      scarf.update(S, (t) => {
+        const z = shot.boy === 'run' ? 22 - ((t % 10) * 4.5) : 21;
+        return { neck: new THREE.Vector3(0.4, 1.17, z), fwd, right, up: new THREE.Vector3(0, 1, 0), bodyR: 0.16, wind: new THREE.Vector3(0.8, 0.2, shot.boy === 'run' ? 4.5 : 0.4) };
+      });
+      // constable whistling behind
+      applyPose(cop, { ...POSE.whistle(S, 1), pos: new THREE.Vector3(-1.2, 0, 14.5), yaw: 0.2 });
+      cop.setFace(FACE.whistle);
+      // crowd
+      for (const p of people) {
+        let z = p.z, yaw = p.yaw;
+        if (p.gait === GAIT.walk) z = p.z + p.dir * p.speed * S;
+        crowd.set(p, p.x, Math.abs(p.x) > 4.8 ? 0.16 : 0, z, yaw, p.phase0 + S * p.speed * 0.9, p.gait, 1, 0, 0, 0, 0);
+      }
+      crowd.commit();
+      engine.dynamicShadow(scene, new THREE.Vector3(0, 0, 18), 18, U.uSunDir.value);
       engine.bakeStatic(scene, 'styletest', new THREE.Vector3(0, 0, -30), 110, U.uSunDir.value);
       return { focus: new THREE.Vector3(0, 0, 10), sunDir: U.uSunDir.value, dynShadow: false };
     },
