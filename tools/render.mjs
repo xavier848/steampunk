@@ -141,9 +141,12 @@ async function main() {
   if (args.audio) {
     // offline procedural soundtrack as WAV
     const [a, bnd] = String(args.audio).split(',').map(Number);
-    const b64 = await page.evaluate(async ([x, y]) => await window.dampf.renderAudio(x, y), [a, bnd]);
-    fs.writeFileSync(args.wav || path.join(out, 'audio.wav'), Buffer.from(b64, 'base64'));
-    console.log('audio written');
+    const s0 = Date.now();
+    const n = await page.evaluate(async ([x, y]) => await window.dampf.renderAudio(x, y), [a, bnd]);
+    const parts = [];
+    for (let o = 0; o < n; o += 4 << 20) parts.push(Buffer.from(await page.evaluate(([oo, ss]) => window.dampf.audioChunk(oo, ss), [o, 4 << 20]), 'base64'));
+    fs.writeFileSync(args.wav || path.join(out, 'audio.wav'), Buffer.concat(parts));
+    console.log(`audio written (${(n / 1e6).toFixed(1)} MB, ${((Date.now() - s0) / 1000).toFixed(1)}s)`);
   }
   if (args.eval) console.log(JSON.stringify(await page.evaluate(String(args.eval))));
   await browser.close();

@@ -58,6 +58,20 @@ window.dampf = {
     return out;
   },
   play() { state.playing = true; state.last = performance.now(); },
+  // procedural soundtrack, rendered offline and deterministically (for the video export)
+  async renderAudio(t0 = 0, t1 = null) {
+    const { Sound, wavBytes } = await import('./audio/sound.js');
+    const s = new Sound(world);
+    const pcm = await s.renderOffline(t0, t1 ?? world.duration);
+    this._wav = wavBytes(pcm);
+    return this._wav.length;
+  },
+  audioChunk(offset, size) {
+    const b = this._wav.subarray(offset, offset + size);
+    let str = '';
+    for (let i = 0; i < b.length; i += 0x8000) str += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+    return btoa(str);
+  },
   pause() { state.playing = false; },
   seek(t) { state.T = t; renderAt(t); },
   profile(t, n = 3) {
@@ -99,7 +113,8 @@ async function main() {
       if (!state.playing) return;
       const dt = Math.min(0.1, (now - state.last) / 1000);
       state.last = now;
-      state.T = Math.min(world.duration, state.T + dt);
+      const tA = window.dampfUI && window.dampfUI.sound ? window.dampfUI.sound.clockT() : null;
+      state.T = Math.min(world.duration, tA !== null && tA >= state.T - 0.5 ? Math.max(state.T, tA) : state.T + dt);
       const t0 = performance.now();
       renderAt(state.T);
       engine.adapt(performance.now() - t0 + 1);

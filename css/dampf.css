@@ -4,3 +4,34 @@ html, body { margin: 0; height: 100%; background: #0b0908; overflow: hidden; }
 body.headless #stage { position: static; display: block; }
 body.headless #film { width: auto; height: auto; }
 body.headless #ui { display: none; }
+
+/* ---- film frame: always 16:9, letterboxed */
+#film { width: min(100vw, 177.78vh); height: min(100vh, 56.25vw); }
+
+/* ---- Bedienoberfläche */
+#ui { position: fixed; inset: 0; pointer-events: none; font-family: Georgia, "DejaVu Serif", serif; color: #f4e2bd; }
+#ui button, #ui select { pointer-events: auto; font: inherit; font-size: 14px; color: #f7e6c4; background: rgba(40, 24, 16, 0.78); border: 1px solid rgba(214, 160, 84, 0.7); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+#ui button:hover, #ui select:hover { background: rgba(90, 52, 24, 0.9); }
+#ui button.on { background: rgba(170, 104, 34, 0.92); }
+#intro { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, rgba(40, 20, 30, 0.55), rgba(8, 6, 10, 0.92)); pointer-events: auto; transition: opacity 1.2s; }
+#intro.gone { opacity: 0; pointer-events: none; }
+.intro-box { text-align: center; }
+.intro-title { font-size: min(13vw, 120px); letter-spacing: 0.08em; font-weight: 700; background: linear-gradient(#fff0b8, #f2c360 30%, #a8661e 60%, #d8a044); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(3px 5px 0 rgba(30, 12, 4, 0.8)); }
+.intro-sub { font-style: italic; opacity: 0.85; margin: 8px 0 28px; }
+#ui button.big { font-size: 22px; padding: 12px 42px; border-width: 2px; }
+.intro-hint { margin-top: 26px; font-size: 13px; opacity: 0.6; }
+#bar { position: absolute; left: 16px; right: 16px; bottom: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; pointer-events: auto; transition: opacity 0.6s; }
+body.idle #bar, body.idle #cam-help { opacity: 0; }
+#time { font-variant-numeric: tabular-nums; min-width: 92px; text-align: center; text-shadow: 0 1px 2px #000; }
+#timeline { position: relative; flex: 1 1 240px; height: 10px; background: rgba(30, 18, 12, 0.7); border: 1px solid rgba(214, 160, 84, 0.5); border-radius: 5px; cursor: pointer; }
+#tl-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #a8661e, #f2c360); border-radius: 5px; }
+#tl-knob { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #ffe2a0; box-shadow: 0 0 6px #f2c360; }
+#tl-marks .mark { position: absolute; top: -4px; width: 2px; height: 18px; background: rgba(255, 226, 160, 0.8); }
+#tl-tip { position: absolute; bottom: 18px; transform: translateX(-50%); white-space: nowrap; font-size: 12px; background: rgba(30, 18, 12, 0.85); padding: 2px 6px; border-radius: 4px; opacity: 0; transition: opacity 0.2s; }
+#timeline:hover #tl-tip { opacity: 1; }
+#chapter-card { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); font-size: 30px; text-shadow: 0 2px 6px #000; opacity: 0; transition: opacity 1s; text-align: center; }
+#chapter-card span { display: block; font-size: 14px; letter-spacing: 0.3em; opacity: 0.8; }
+#chapter-card.show { opacity: 1; }
+#cam-help { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 13px; background: rgba(30, 18, 12, 0.75); padding: 6px 12px; border-radius: 6px; opacity: 0; transition: opacity 0.4s; }
+#cam-help.show { opacity: 1; }
+@media (max-width: 700px) { #ui button, #ui select { font-size: 12px; padding: 5px 8px; } #timeline { flex-basis: 100%; order: 10; } }

@@ -61,7 +61,7 @@ function buildTimeMap0(specs, rampIn, rampOut) {
   return new TimeMap(keys);
 }
 
-export const DURATION = 540;
+export const DURATION = 501; // the film derives its exact length from the shot list
 
 // chapter start times are derived from the story (see story/story.js)
 export const CHAPTERS = [
